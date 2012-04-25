@@ -1,3 +1,8 @@
+# Julia Wrapper for libcuda.so (tested against version 4.2)
+# USAGE: 
+#  You must call cuInit() first
+#  to get a list of device call jlcuDeviceList()
+
 libcuda = dlopen("libcuda")
 
 #libcuda_cuInitSym = dlsym(libcuda,:cuInit)
@@ -16,7 +21,10 @@ const CUresult_invalid_value = 1
 const CUresult_out_of_memory = 2
 const CUresult_not_initialized = 3
 
-function cudaCheck(v)
+## custom functions
+
+# give useful string for errors
+function jlcuCheck(v)
   if CUresult_success == v
   elseif CUresult_invalid_value == v
     error("CUDA Call Error($v): Invalid Value")
@@ -30,7 +38,8 @@ function cudaCheck(v)
   return v
 end
 
-function cudaDeviceList()
+# list avaiable cuda devices
+function jlcuDeviceList()
   n = cuDeviceGetCount()
   for i = 0:(n-1)
     hnd = cuDeviceGet(i)
@@ -43,34 +52,38 @@ function cudaDeviceList()
   end
 end
 
-function cuInit()
-  cudaCheck(ccall(dlsym(libcuda,:cuInit),CUresult,(Uint,), 0))
+## Library functions
+
+function cuInit(flags)
+  jlcuCheck(ccall(dlsym(libcuda,:cuInit),CUresult,(Uint,), flags))
 end
+
+cuInit() = cuInit(0)
 
 # call to cuInit() not needed before calling cuDriverGetVersion
 function cuDriverGetVersion()
   #parameter is actually a pointer to Uint, but we use int to display human readable value
   version = Array(Int32,1)
-  cudaCheck(ccall(dlsym(libcuda,:cuDriverGetVersion),CUresult,(Ptr{Int32},), version))
+  jlcuCheck(ccall(dlsym(libcuda,:cuDriverGetVersion),CUresult,(Ptr{Int32},), version))
   return version[1]
 end
 
 function cuDeviceGetCount()
   deviceCount = Array(Int32,1)
-  cudaCheck(ccall(dlsym(libcuda,:cuDeviceGetCount),CUresult,(Ptr{Int32},), deviceCount))
+  jlcuCheck(ccall(dlsym(libcuda,:cuDeviceGetCount),CUresult,(Ptr{Int32},), deviceCount))
   return deviceCount[1]
 end
 
 function cuDeviceComputeCapability(deviceHandle)
   major = Array(Int32,1)
   minor = Array(Int32,1)
-  cudaCheck(ccall(dlsym(libcuda,:cuDeviceComputeCapability),CUresult,(Ptr{Int32},Ptr{Int32},Int32),major,minor,deviceHandle))
+  jlcuCheck(ccall(dlsym(libcuda,:cuDeviceComputeCapability),CUresult,(Ptr{Int32},Ptr{Int32},Int32),major,minor,deviceHandle))
   return (major[1],minor[1])
 end
 
 function cuDeviceGet(index)
   deviceHandle = Array(CUdevice,1)
-  cudaCheck(ccall(dlsym(libcuda,:cuDeviceGet),CUresult,(Ptr{CUdevice},Int32),deviceHandle,index))
+  jlcuCheck(ccall(dlsym(libcuda,:cuDeviceGet),CUresult,(Ptr{CUdevice},Int32),deviceHandle,index))
   return deviceHandle[1]
 end
 
@@ -79,13 +92,13 @@ end
 
 function cuDeviceGetName(deviceHandle)
   deviceName = Array(Uint8, 128)
-  cudaCheck(ccall(dlsym(libcuda,:cuDeviceGetName),CUresult,(Ptr{Uint8},Int32,CUdevice),deviceName, length(deviceName),deviceHandle))
+  jlcuCheck(ccall(dlsym(libcuda,:cuDeviceGetName),CUresult,(Ptr{Uint8},Int32,CUdevice),deviceName, length(deviceName),deviceHandle))
   return cstring(convert(Ptr{Uint8}, deviceName))
 end
 
 function cuDeviceTotalMem(deviceHandle)
   sizeBytes = Array(Uint64,1)
-  cudaCheck(ccall(dlsym(libcuda,:cuDeviceTotalMem),CUresult,(Ptr{Uint64},Int32),sizeBytes,deviceHandle))
+  jlcuCheck(ccall(dlsym(libcuda,:cuDeviceTotalMem),CUresult,(Ptr{Uint64},Int32),sizeBytes,deviceHandle))
   return sizeBytes[1]
 end
 
@@ -93,12 +106,12 @@ end
 
 function cuCtxCreate(flags,deviceHandle)
   context = Array(CUcontext,1)
-  cudaCheck(ccall(dlsym(libcuda,:cuCtxCreate),CUresult,(Ptr{CUcontext},Uint32,CUdevice),context,flags,deviceHandle))
+  jlcuCheck(ccall(dlsym(libcuda,:cuCtxCreate),CUresult,(Ptr{CUcontext},Uint32,CUdevice),context,flags,deviceHandle))
   return context[1]
 end
 
 function cuCtxDestroy(context)
-  cudaCheck(ccall(dlsym(libcuda,:cuCtxDestroy),CUresult,(CUcontext,),context))
+  jlcuCheck(ccall(dlsym(libcuda,:cuCtxDestroy),CUresult,(CUcontext,),context))
   return ()
 end
 
