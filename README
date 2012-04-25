@@ -17,5 +17,7 @@ To use load("demat.jl")
 # * x[a:b] = v (sub view assignment)
 # * x[] = v[a:s:b] (sub view extraction)
 # * x[] = v[a:b] (sub view extraction)
+# * (d[c] = a[c]; [~c] = b[~c]) should be converted to "for i = 1:N d[i] = c[i]?a[i]:b[i] end"
+
 # * A BUNCH OF OTHER STUFF
 
