@@ -4,36 +4,38 @@
 load("demat.jl")
 
 ## test code
+
 function demat_test()
-    N = 1000000
+    N = 10000000
     a = rand(N)
     b = rand(N)
     c = rand(N)
     d = rand(N)
-    ad = DeVecJ{Float64}(a)
+    ad = DeVecJ{Float64}(copy(a))
     bd = DeVecJ{Float64}(b)
     cd = DeVecJ{Float64}(c)
     dd = DeVecJ{Float64}(d)
 
-    for i = 1:4
+    r1 = 0
+    for i = 1:1
         println("-------------------")
-        tic()
-        ad[] = bd+cd.*dd
-        tr = toq()
-        println("Delayed Expression Total Time ",tr)
+        println("#1 Delayed Expression:")
+        @time ad[] = bd+cd.*dd
 
-        tic()
-        a = b+c.*d
-        tr = toq()
-        println("Standard Julia Vector Execution Time ",tr)
+        println("#2 Standard Julia Vector:")
+        @time a = b+c.*d
 
-        tic()
-        for j = 1:N
-        a[j] = b[j] + c[j] .* d[j]
+        println("#3 Standard Julia For Loop:")
+        @time for j = 1:N
+            a[j] = b[j] + c[j] .* d[j]
         end
-        tr = toq()
-        println("Standard Julia For Loop Execution Time ",tr)
+
+        println()
+        println("error(sum((#3 - #1).^2) / abs(sum(#3)) == ",sum((a-ad.data).^2) / sum(a))
     end
+
+    r1
 end
 
 demat_test()
+

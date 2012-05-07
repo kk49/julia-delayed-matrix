@@ -42,43 +42,71 @@ function de_check_dims(a::DeBinOp)
   end
 end
 
-function de_eval(a::DeConst)
-  ((p,idx)->a.p1,())
+# de_eval returns a 3-tuple that containes (symbol that contains the value of the extression, the quoted preable code, the quoted kernal code) 
+function de_eval(a::DeConst,idxSym::Symbol)
+    @gensym r
+    ( r
+    , quote ($r) = ($(a.p1)) end
+    , quote end
+    )
 end
 
-function de_eval(a::DeReadOp)
-  ((p,idx)->p[idx],a.p1.data)
+function de_eval(a::DeReadOp,idxSym::Symbol)
+    @gensym r src
+    ( r
+    , quote ($src) = ($(a.p1.data)) end
+    , quote ($r) = ($src)[($idxSym)] end
+    )
 end
 
-function de_eval(a::DeUniOp)
-  opf = eval(a.op)
-  (p1f,p1p) = de_eval(a.p1)
-  ((p,idx)->opf(p1f(p,idx)),p1p) 
-end
-
-function de_eval(a::DeBinOp) 
-  opf = eval(a.op)
-  (p1f,p1p) = de_eval(a.p1)
-  (p2f,p2p) = de_eval(a.p2)
-  ((p,idx)->opf(p1f(p[1],idx),p2f(p[2],idx)),(p1p,p2p))
+for op = deBinOpList
+  opType = de_op_to_type(op);
+  opSingle = de_op_to_scaler(op);
+  @eval function de_eval(v::DeBinOp{$opType},idxSym::Symbol)
+      @gensym r
+      p1 = de_eval(v.p1,idxSym)
+      p2 = de_eval(v.p2,idxSym)
+      preamble = Expr(p1[2].head,[p1[2].args,p2[2].args],p1[2].typ)
+      kp = quote ($r) = ($($opSingle))(($(p1[1])),($(p2[1]))) end
+      kernel = Expr(kp.head,[p1[3].args,p2[3].args,kp.args],kp.typ)
+      ( r
+      , preamble
+      , kernel
+      )
+  end
 end
 
 function assign(lhs::DeArrJulia,rhs::DeExpr)
-  tic()
-  rhsSz = de_check_dims(rhs)
-  lhsSz = size(lhs)
+    #println("Delayed Expression Setup Time:")
+    @gensym i
+    rhsSz = de_check_dims(rhs)
+    lhsSz = size(lhs)
+    lhsData = lhs.data
 
-  if rhsSz != lhsSz
-    error("src & dst size does not match. NOT IMPLEMENTED FOR SCALARS FIX")
-  end
-  
-  (fcall,fdata) = de_eval(rhs)
-  println("Delayed Expression Setup Time ",toq())
-  tic()
-  for i = 1:lhsSz[1]
-     lhs.data[i] = fcall(fdata,i)
-  end 
-  println("Delayed Expression Execution Time ",toq()) 
+    if rhsSz != lhsSz
+        error("src & dst size does not match. NOT IMPLEMENTED FOR SCALARS FIX")
+    end
+
+    @gensym i hiddenFunc
+    (rhsResult,rhsPreamble,rhsKernel) = de_eval(rhs,i)
+
+    ex = quote function ($hiddenFunc)() 
+        $rhsPreamble
+        for ($i) = 1:($(lhsSz[1]))
+            $rhsKernel
+            ($lhsData)[($i)] = ($rhsResult)
+        end
+    end
+    end
+
+    println(rhsResult)
+    println(rhsPreamble)
+    println(rhsKernel)
+    println()
+    println(ex)
+ 
+    eval(ex)
+    (eval(hiddenFunc))()
 end
 
 assign(lhs::DeArrJulia,rhs::DeEle) = assign(lhs,de_promote(rhs)...)
