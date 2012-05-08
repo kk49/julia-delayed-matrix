@@ -11,6 +11,7 @@ type DeArrJulia{T,N} <: DeArr{DeBackEndJulia,T,N}
 end
 
 size(a::DeArrJulia) = size(a.data)
+size(a::DeArrJulia,dim) = size(a.data,dim)
 
 typealias DeVecJ{T} DeArrJulia{T,1}
 typealias DeMatJ{T} DeArrJulia{T,2}
@@ -42,7 +43,12 @@ function de_check_dims(a::DeBinOp)
   end
 end
 
-# de_eval returns a 3-tuple that containes (symbol that contains the value of the extression, the quoted preable code, the quoted kernal code) 
+# de_eval returns a 3-tuple that contains
+#   symbol that contains the value of the extression
+#   the quoted preable code
+#   the quoted kernal code
+#de_eval(a,idxSym) = de_eval(a,idxSym,x->x)
+
 function de_eval(a::DeConst,idxSym::Symbol)
     @gensym r
     ( r
@@ -54,7 +60,7 @@ end
 function de_eval(a::DeReadOp,idxSym::Symbol)
     @gensym r src
     ( r
-    , quote ($src) = ($(a.p1.data)) end
+    , quote ($src) = ($a).p1.data end
     , quote ($r) = ($src)[($idxSym)] end
     )
 end
@@ -66,9 +72,8 @@ for op = deBinOpList
       @gensym r
       p1 = de_eval(v.p1,idxSym)
       p2 = de_eval(v.p2,idxSym)
-      preamble = Expr(p1[2].head,[p1[2].args,p2[2].args],p1[2].typ)
-      kp = quote ($r) = ($($opSingle))(($(p1[1])),($(p2[1]))) end
-      kernel = Expr(kp.head,[p1[3].args,p2[3].args,kp.args],kp.typ)
+      preamble = quote $(p1[2]);$(p2[2]) end
+      kernel = quote $(p1[3]);$(p2[3]);($r) = ($($opSingle))(($(p1[1])),($(p2[1]))) end
       ( r
       , preamble
       , kernel
@@ -81,7 +86,6 @@ function assign(lhs::DeArrJulia,rhs::DeExpr)
     @gensym i
     rhsSz = de_check_dims(rhs)
     lhsSz = size(lhs)
-    lhsData = lhs.data
 
     if rhsSz != lhsSz
         error("src & dst size does not match. NOT IMPLEMENTED FOR SCALARS FIX")
@@ -89,12 +93,15 @@ function assign(lhs::DeArrJulia,rhs::DeExpr)
 
     @gensym i hiddenFunc
     (rhsResult,rhsPreamble,rhsKernel) = de_eval(rhs,i)
+    rhsType = typeof(rhs);
 
-    ex = quote function ($hiddenFunc)() 
+    ex = quote function ($hiddenFunc)(plhs::DeArrJulia,prhs::($rhsType)) 
+        N = size(plhs,1)
+        lhsData = plhs.data
         $rhsPreamble
-        for ($i) = 1:($(lhsSz[1]))
+        for ($i) = 1:N
             $rhsKernel
-            ($lhsData)[($i)] = ($rhsResult)
+            lhsData[($i)] = ($rhsResult)
         end
     end
     end
@@ -106,7 +113,7 @@ function assign(lhs::DeArrJulia,rhs::DeExpr)
     println(ex)
  
     eval(ex)
-    (eval(hiddenFunc))()
+    (eval(hiddenFunc))(lhs,rhs)
 end
 
 assign(lhs::DeArrJulia,rhs::DeEle) = assign(lhs,de_promote(rhs)...)

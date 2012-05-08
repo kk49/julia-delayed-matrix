@@ -20,14 +20,14 @@ function demat_test()
     for i = 1:1
         println("-------------------")
         println("#1 Delayed Expression:")
-        @time ad[] = bd+cd.*dd
+        @time ad[] = bd+cd.*dd + 1.0
 
         println("#2 Standard Julia Vector:")
-        @time a = b+c.*d
+        @time a = b+c.*d + 1.0
 
         println("#3 Standard Julia For Loop:")
         @time for j = 1:N
-            a[j] = b[j] + c[j] .* d[j]
+            a[j] = b[j] + c[j] * d[j] + 1.0
         end
 
         println()
