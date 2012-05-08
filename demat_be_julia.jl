@@ -113,7 +113,7 @@ function assign(lhs::DeArrJulia,rhs::DeExpr)
     println(ex)
  
     eval(ex)
-    (eval(hiddenFunc))(lhs,rhs)
+    @time ((eval(hiddenFunc))(lhs,rhs))
 end
 
 assign(lhs::DeArrJulia,rhs::DeEle) = assign(lhs,de_promote(rhs)...)
