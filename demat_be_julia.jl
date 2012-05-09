@@ -49,7 +49,7 @@ end
 #   the quoted kernal code
 #de_eval(a,idxSym) = de_eval(a,idxSym,x->x)
 
-function de_eval(a::DeConst,idxSym::Symbol)
+function de_eval(a::DeConst,idxSym)
     @gensym r
     ( r
     , quote ($r) = ($(a.p1)) end
@@ -57,23 +57,27 @@ function de_eval(a::DeConst,idxSym::Symbol)
     )
 end
 
-function de_eval(a::DeReadOp,idxSym::Symbol)
+function de_eval(a::DeReadOp,idxSym)
     @gensym r src
     ( r
-    , quote ($src) = ($a).p1.data end
+    , quote ($src) = ($(a.p1.data)) end
     , quote ($r) = ($src)[($idxSym)] end
     )
 end
 
 for op = deBinOpList
   opType = de_op_to_type(op);
-  opSingle = de_op_to_scaler(op);
-  @eval function de_eval(v::DeBinOp{$opType},idxSym::Symbol)
+  opSingle = de_op_to_scaler(:($op));
+  @eval function de_eval(v::DeBinOp{$opType},idxSym)
       @gensym r
       p1 = de_eval(v.p1,idxSym)
       p2 = de_eval(v.p2,idxSym)
+      #preamble = quote $(p1[2]);$(p2[2]) end
       preamble = quote $(p1[2]);$(p2[2]) end
+      #preamble = quote end
+      #kernel = quote $(p1[3]);$(p2[3]);($r) = ($opSingle)(($(p1[1])),($(p2[1]))) end
       kernel = quote $(p1[3]);$(p2[3]);($r) = ($($opSingle))(($(p1[1])),($(p2[1]))) end
+      #kernel = quote end
       ( r
       , preamble
       , kernel
@@ -83,7 +87,6 @@ end
 
 function assign(lhs::DeArrJulia,rhs::DeExpr)
     #println("Delayed Expression Setup Time:")
-    @gensym i
     rhsSz = de_check_dims(rhs)
     lhsSz = size(lhs)
 
@@ -95,25 +98,32 @@ function assign(lhs::DeArrJulia,rhs::DeExpr)
     (rhsResult,rhsPreamble,rhsKernel) = de_eval(rhs,i)
     rhsType = typeof(rhs);
 
-    ex = quote function ($hiddenFunc)(plhs::DeArrJulia,prhs::($rhsType)) 
+    ex = quote function ($hiddenFunc)(plhs::DeArrJulia,prhs::($rhsType))
         N = size(plhs,1)
         lhsData = plhs.data
-        $rhsPreamble
-        for ($i) = 1:N
+        @time ($rhsPreamble)
+        ($i) = 1
+        @time ($rhsKernel)
+        @time (lhsData[($i)] =($rhsResult))
+        for ($i) = 2:N
             $rhsKernel
             lhsData[($i)] = ($rhsResult)
         end
     end
     end
 
+    println("---- rhsResult ----")
     println(rhsResult)
+    println("---- rhsPreamble----")
     println(rhsPreamble)
+    println("---- rhsKernel ----")
     println(rhsKernel)
     println()
     println(ex)
  
     eval(ex)
-    @time ((eval(hiddenFunc))(lhs,rhs))
+    hf = eval(hiddenFunc)
+    @time hf(lhs,rhs)
 end
 
 assign(lhs::DeArrJulia,rhs::DeEle) = assign(lhs,de_promote(rhs)...)
