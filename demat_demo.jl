@@ -6,7 +6,7 @@ load("demat.jl")
 ## test code
 
 function demat_test()
-    N = 10000000
+    N = 100000000
     a = rand(N)
     b = rand(N)
     c = rand(N)
@@ -20,17 +20,17 @@ function demat_test()
     for i = 1:1
         println("-------------------")
         println("#1 Delayed Expression:")
-        #@time ad[] = bd+cd.*dd + 1.0
-        @time ad[] = bd + 1.0
+        @time ad[] = bd+cd.*dd + 1.0
+        #@time ad[] = bd + 1.0 
 
         println("#2 Standard Julia Vector:")
-        #@time a = b+c.*d + 1.0
-        @time a = b + 1.0
+        @time a = b+c.*d + 1.0
+        #@time a = b + 1.0
 
         println("#3 Standard Julia For Loop:")
         @time for j = 1:N
-            #a[j] = b[j] + c[j] * d[j] + 1.0
-            a[j] = b[j] + 1.0
+            a[j] = b[j] + c[j] * d[j] + 1.0
+            #a[j] = b[j] + 1.0
         end
 
         println()
@@ -42,15 +42,8 @@ end
 
 #demat_test()
 
-a = randn(1000000);
-ad = DeVecJ{Float64}(a); 
-bd =DeVecJ{Float64}(copy(a));
-finfer(assign,(ad,ad+1))
-
 function simple_test()
-
-#--------------------------------------
-
+    #--------------------------------------
     function test1(x::Array{Float64})
        local s = 0
        local i
@@ -59,9 +52,7 @@ function simple_test()
        end
        s
     end
-
-#--------------------------------------
-
+    #--------------------------------------
     @gensym ns ti
     @eval function test2(x::Array{Float64})
        ($ns) = x;
@@ -72,9 +63,7 @@ function simple_test()
        end
        s 
     end
-
-#--------------------------------------
-
+    #--------------------------------------
     function extract_x3(x)
       @gensym r
 
@@ -98,15 +87,13 @@ function simple_test()
 
        eval(hf)() #if eval is not here it returns the results for the last call to test3
     end
-
-#--------------------------------------
+    #--------------------------------------
     function extract_x4(xi,idx)
       @gensym r src
 
       (r,quote ($src) = ($x) end,quote ($r) = ($src)[($idx)] end)
     end
 
-    
     function test4(x::Array{Float64})
        @gensym ti
        
@@ -125,8 +112,7 @@ function simple_test()
 
        eval(hf)() #if eval is not here it returns the results for the last call to test3
     end
-
-#--------------------------------------
+    #--------------------------------------
 
     x = randn(1000000)
     n = 20
@@ -143,4 +129,36 @@ function simple_test()
     println(" t3time: ",t3time," s: ",s3)
     println(" t4time: ",t4time," s: ",s4)
     println()
+end
+
+function stest()
+   @gensym test1 test2
+    
+   @eval function ($test1)(a)
+      s = 0
+      for i = 1:size(a,1)
+        s += *(a[i],i)
+      end
+      s
+   end
+
+   @gensym op 
+   op = de_op_to_scaler(:.*)
+   @eval function ($test2)(a)
+      s = 0
+      for i = 1:size(a,1)
+        s += ($op)(a[i],i)
+      end
+      s
+   end
+   
+   x = randn(1000000)
+   N = 1 
+   local s1,s2
+   t1 = @elapsed for i = 1:N s1 = eval(test1)(x) end
+   t2 = @elapsed for i = 1:N s2 = eval(test2)(x) end
+
+   println("test func 1: time = ",t1," result = ",s1);
+   println("test func 2: time = ",t2," result = ",s2);
+   
 end

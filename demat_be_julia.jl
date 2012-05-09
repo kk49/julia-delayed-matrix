@@ -65,18 +65,31 @@ function de_eval(a::DeReadOp,idxSym)
     )
 end
 
+#function de_do_op(S,a,b) (S)(a,b) end
+#for op = deBinOpList
+#  opType = de_op_to_type(op)
+#  opSingle = de_op_to_scaler(op)
+#  opSingle = eval(opSingle)
+#  opS = $op;
+#  @eval function de_do_op(T::DeBinOp{$opType},a,b) ($opS)(a,b) end
+#end
+
+function de_do_op(T::DeBinOp{DeOpAdd},a,b) +(a,b) end
+function de_do_op(T::DeBinOp{DeOpMulEle},a,b) *(a,b) end
+
 for op = deBinOpList
   opType = de_op_to_type(op);
-  opSingle = de_op_to_scaler(:($op));
+  opSingle = de_op_to_scaler(op);
+  println(opSingle)
   @eval function de_eval(v::DeBinOp{$opType},idxSym)
       @gensym r
       p1 = de_eval(v.p1,idxSym)
       p2 = de_eval(v.p2,idxSym)
-      #preamble = quote $(p1[2]);$(p2[2]) end
       preamble = quote $(p1[2]);$(p2[2]) end
-      #preamble = quote end
-      #kernel = quote $(p1[3]);$(p2[3]);($r) = ($opSingle)(($(p1[1])),($(p2[1]))) end
-      kernel = quote $(p1[3]);$(p2[3]);($r) = ($($opSingle))(($(p1[1])),($(p2[1]))) end
+      #kernel = quote $(p1[3]);$(p2[3]);($r) = ($($opSingle))($(p1[1]),$(p2[1])) end
+      kernel = quote $(p1[3]);$(p2[3]);($r) = ($($op))($(p1[1]),$(p2[1])) end
+      #kernel = quote $(p1[3]);$(p2[3]);($r) = de_do_op($v,$(p1[1]),$(p2[1])) end
+      #kernel = quote $(p1[3]);$(p2[3]);($r) = +($(p1[1]),$(p2[1])) end
       #kernel = quote end
       ( r
       , preamble
@@ -101,25 +114,22 @@ function assign(lhs::DeArrJulia,rhs::DeExpr)
     ex = quote function ($hiddenFunc)(plhs::DeArrJulia,prhs::($rhsType))
         N = size(plhs,1)
         lhsData = plhs.data
-        @time ($rhsPreamble)
-        ($i) = 1
-        @time ($rhsKernel)
-        @time (lhsData[($i)] =($rhsResult))
-        for ($i) = 2:N
+        $rhsPreamble
+        for ($i) = 1:N
             $rhsKernel
             lhsData[($i)] = ($rhsResult)
         end
     end
     end
 
-    println("---- rhsResult ----")
-    println(rhsResult)
-    println("---- rhsPreamble----")
-    println(rhsPreamble)
-    println("---- rhsKernel ----")
-    println(rhsKernel)
-    println()
-    println(ex)
+    #println("---- rhsResult ----")
+    #println(rhsResult)
+    #println("---- rhsPreamble----")
+    #println(rhsPreamble)
+    #println("---- rhsKernel ----")
+    #println(rhsKernel)
+    #println()
+    #println(ex)
  
     eval(ex)
     hf = eval(hiddenFunc)
