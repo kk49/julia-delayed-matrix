@@ -16,21 +16,21 @@ size(a::DeArrJulia,dim) = size(a.data,dim)
 typealias DeVecJ{T} DeArrJulia{T,1}
 typealias DeMatJ{T} DeArrJulia{T,2}
 
-function de_check_dims(a::DeConst)
+function de_jl_check_dims(a::DeConst)
   ()
 end
 
-function de_check_dims(a::DeReadOp)
+function de_jl_check_dims(a::DeReadOp)
   size(a.p1)
 end
 
-function de_check_dims(a::DeUniOp)
-  de_check_dims(a.p1)
+function de_jl_check_dims(a::DeUniOp)
+  de_jl_check_dims(a.p1)
 end
 
-function de_check_dims(a::DeBinOp)
-  r1 = de_check_dims(a.p1)
-  r2 = de_check_dims(a.p2)
+function de_jl_check_dims(a::DeBinOp)
+  r1 = de_jl_check_dims(a.p1)
+  r2 = de_jl_check_dims(a.p2)
 
   if length(r1) == 0
     return r2
@@ -43,13 +43,12 @@ function de_check_dims(a::DeBinOp)
   end
 end
 
-# de_eval returns a 3-tuple that contains
+# de_jl_eval returns a 3-tuple that contains
 #   symbol that contains the value of the extression
 #   the quoted preable code
 #   the quoted kernal code
-#de_eval(a,idxSym) = de_eval(a,idxSym,x->x)
 
-function de_eval(a::DeConst,idxSym)
+function de_jl_eval(a::DeConst,idxSym)
     @gensym r
     ( r
     , quote ($r) = ($(a.p1)) end
@@ -57,7 +56,7 @@ function de_eval(a::DeConst,idxSym)
     )
 end
 
-function de_eval(a::DeReadOp,idxSym)
+function de_jl_eval(a::DeReadOp,idxSym)
     @gensym r src
     ( r
     , quote ($src) = ($(a.p1.data)) end
@@ -74,44 +73,38 @@ end
 #  @eval function de_do_op(T::DeBinOp{$opType},a,b) ($opS)(a,b) end
 #end
 
-function de_do_op(T::DeBinOp{DeOpAdd},a,b) +(a,b) end
-function de_do_op(T::DeBinOp{DeOpMulEle},a,b) *(a,b) end
-
-for op = deBinOpList
-  opType = de_op_to_type(op);
-  opSingle = de_op_to_scaler(op);
-  println(opSingle)
-  @eval function de_eval(v::DeBinOp{$opType},idxSym)
-      @gensym r
-      p1 = de_eval(v.p1,idxSym)
-      p2 = de_eval(v.p2,idxSym)
-      preamble = quote $(p1[2]);$(p2[2]) end
-      #kernel = quote $(p1[3]);$(p2[3]);($r) = ($($opSingle))($(p1[1]),$(p2[1])) end
-      kernel = quote $(p1[3]);$(p2[3]);($r) = ($($op))($(p1[1]),$(p2[1])) end
-      #kernel = quote $(p1[3]);$(p2[3]);($r) = de_do_op($v,$(p1[1]),$(p2[1])) end
-      #kernel = quote $(p1[3]);$(p2[3]);($r) = +($(p1[1]),$(p2[1])) end
-      #kernel = quote end
-      ( r
-      , preamble
-      , kernel
-      )
-  end
+function de_jl_eval(v::DeBinOp,idxSym)
+   @gensym r
+   p1 = de_jl_eval(v.p1,idxSym)
+   p2 = de_jl_eval(v.p2,idxSym)
+   preamble = quote $(p1[2]);$(p2[2]) end
+   kernel = quote $(p1[3]);$(p2[3]);($r) = de_jl_do_op($v,$(p1[1]),$(p2[1])) end
+   ( r
+   , preamble
+   , kernel
+   )
 end
 
-function assign(lhs::DeArrJulia,rhs::DeExpr)
-    #println("Delayed Expression Setup Time:")
-    rhsSz = de_check_dims(rhs)
+for op = deBinOpList
+  opType = de_op_to_type[op];
+  opSingle = de_op_to_scaler[op];
+  @eval de_jl_do_op(v::DeBinOp{$opType},a,b) = ($opSingle)(a,b)
+  #@eval function de_jl_do_op(v::DeBinOp{$opType},a,b) = ($opSingle)(a,b) end # does not work?
+end
+
+function assign(lhs::DeVecJ,rhs::DeExpr)
+    rhsSz = de_jl_check_dims(rhs)
     lhsSz = size(lhs)
 
     if rhsSz != lhsSz
         error("src & dst size does not match. NOT IMPLEMENTED FOR SCALARS FIX")
     end
 
-    @gensym i hiddenFunc
-    (rhsResult,rhsPreamble,rhsKernel) = de_eval(rhs,i)
+    @gensym i
+    (rhsResult,rhsPreamble,rhsKernel) = de_jl_eval(rhs,i)
     rhsType = typeof(rhs);
 
-    ex = quote function ($hiddenFunc)(plhs::DeArrJulia,prhs::($rhsType))
+    @eval function hiddenFunc(plhs::DeVecJ,prhs::($rhsType))
         N = size(plhs,1)
         lhsData = plhs.data
         $rhsPreamble
@@ -120,20 +113,8 @@ function assign(lhs::DeArrJulia,rhs::DeExpr)
             lhsData[($i)] = ($rhsResult)
         end
     end
-    end
 
-    #println("---- rhsResult ----")
-    #println(rhsResult)
-    #println("---- rhsPreamble----")
-    #println(rhsPreamble)
-    #println("---- rhsKernel ----")
-    #println(rhsKernel)
-    #println()
-    #println(ex)
- 
-    eval(ex)
-    hf = eval(hiddenFunc)
-    @time hf(lhs,rhs)
+    hiddenFunc(lhs,rhs)
 end
 
 assign(lhs::DeArrJulia,rhs::DeEle) = assign(lhs,de_promote(rhs)...)

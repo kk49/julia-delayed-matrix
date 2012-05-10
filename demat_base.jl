@@ -43,7 +43,6 @@ de_promote(x,xs...) = tuple(de_promote(x)...,de_promote(xs...)...)
 
 typealias BinOpParams Union((DeEle,Number),(Number,DeEle),(DeEle,DeEle))
 
-type DeOpNull end
 type DeOpAdd end
 type DeOpSub end
 type DeOpMulEle end
@@ -51,29 +50,20 @@ type DeOpDivEle end
 
 const deBinOpList = (:+,:-,:.*,:./);
 
-function de_op_to_type(op::Symbol)
-  if op == :+ return DeOpAdd
-  elseif op == :- return DeOpSub
-  elseif op == :.* return DeOpMulEle
-  elseif op == :./ return DeOpDivEle
-  else return DeOpNull
-  end
-end
+de_op_to_type = dict((:+,),(DeOpAdd,))
+de_op_to_type[:-] = DeOpSub
+de_op_to_type[:.*] = DeOpMulEle
+de_op_to_type[:./] = DeOpDivEle
 
-function de_op_to_scaler(op::Symbol)
-  if op == :+ return :+
-  elseif op == :- return :-
-  elseif op == :.* return :*
-  elseif op == :./ return :/
-  else return DeOpNull
-  end
-end
+de_op_to_scaler = dict((:+,),(:+,))
+de_op_to_scaler[:-] = :-
+de_op_to_scaler[:.*] = :*
+de_op_to_scaler[:./] = :/
 
 for op = deBinOpList
-  opType = de_op_to_type(op);
+  opType = de_op_to_type[op];
   @eval ($op)(a::DeEle,b::Number) = DeBinOp{$opType}(de_promote(a,b)...)
   @eval ($op)(a::Number,b::DeEle) = DeBinOp{$opType}(de_promote(a,b)...)
   @eval ($op)(a::DeEle,b::DeEle) =  DeBinOp{$opType}(de_promote(a,b)...)
-  #@eval ($op)(ps...::BinOpParams) =  DeBinOp($op,de_promote(ps...)...)
 end
 
