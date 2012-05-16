@@ -3,3 +3,4 @@
 
 load("demat_base.jl")
 load("demat_be_julia.jl")
+load("demat_be_cuda.jl")

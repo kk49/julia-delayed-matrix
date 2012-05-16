@@ -111,6 +111,8 @@ function jlcuDeviceList()
     mem /= 1024.0;
     println("$hnd : $name : CC = $ccap : Mem (MiB) = $mem")
   end
+
+  return n
 end
 
 
@@ -177,13 +179,13 @@ end
 ## Context Management
 
 if CUDA_API_VERSION >= 3020
-  function cuCtxCreate(flags::Uint32,hdev::CUdevice)
+  function cuCtxCreate(flags,hdev)
     context = Array(CUcontext,1)
     jlcuCheck(ccall(dlsym(libcuda,:cuCtxCreate_v2),CUresult,(Ptr{CUcontext},Uint32,CUdevice),context,flags,hdev))
     return context[1]
   end
 else
-  function cuCtxCreate(flags::Uint32,hdev::CUdevice)
+  function cuCtxCreate(flags,hdev)
     context = Array(CUcontext,1)
     jlcuCheck(ccall(dlsym(libcuda,:cuCtxCreate),CUresult,(Ptr{CUcontext},Uint32,CUdevice),context,flags,hdev))
     return context[1]
