@@ -15,6 +15,7 @@ function demat_test()
     bd = DeVecJ{Float32}(b)
     cd = DeVecJ{Float32}(c)
     dd = DeVecJ{Float32}(d)
+    #the following should be included somehow in the time below...
     ac = DeVecCu{Float32}(a);
     bc = DeVecCu{Float32}(b);
     cc = DeVecCu{Float32}(c);
