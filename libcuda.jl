@@ -9,27 +9,76 @@
 
 libcuda = dlopen("libcuda")
 
-#libcuda_cuInitSym = dlsym(libcuda,:cuInit)
-
 typealias CUdevice Int32
 typealias CUcontext Ptr{Void}
 typealias CUmodule Ptr{Void}
 typealias CUfunction Ptr{Void}
-typealias CUdeviceptr Uint32
+typealias CUdeviceptr Uint #64bit with 64 bit library, 32bit with 32bit library...
 typealias CUevent Ptr{Void}
 typealias CUstream Ptr{Void}
-typealias CUfunc_cache  Int32 # enum
-typealias CUlimit Int32 # enum 
+
+typealias CUfunc_cache  Uint32 # enum
+  const CU_FUNC_CACHE_PREFER_NONE   = 0; # no preference for shared memory or L1 cache size
+  const CU_FUNC_CACHE_PREFER_SHARED = 1; # prefer larger shared memory and smaller L1
+  const CU_FUNC_CACHE_PREFER_L1     = 2; # prefer smaller shared memory and larger L1
+  const CU_FUNC_CACHE_PREFER_EQUAL  = 4; # prefer equal shared memory and L1 size
+
+typealias CUlimit Uint32 # enum
+  const CU_LIMIT_STACK_SIZE = 0;
+  const CU_LIMIT_PRINTF_FIFO_SIZE = 1;
+  const CU_LIMIT_MALLOC_HEAP_SIZE = 2;
+ 
 typealias CUsurfref Ptr{Void};
+
 typealias CUtexref Ptr{Void};
 
-typealias CUsize_t Uint32
+typealias CUsize_t Uint #64bit / 32bit
 
 typealias CUresult Int32
-const CUresult_success  = 0
-const CUresult_invalid_value = 1
-const CUresult_out_of_memory = 2
-const CUresult_not_initialized = 3
+  const CUresult_success  = 0
+  const CUresult_invalid_value = 1
+  const CUresult_out_of_memory = 2
+  const CUresult_not_initialized = 3
+  const CUresult_invalid_context = 201
+
+typealias CUjit_options Uint32;
+  const CU_JIT_MAX_REGISTERS = 0;         #Uint32   #(Input) Maximum number of registers each thread may use #(Output) NA
+  const CU_JIT_THREADS_PER_BLOCK = 1;     #Uint32   #(Input) minimum number of threads per block             #(Output) Actual number compiler came up with
+  const CU_JIT_WALL_TIME = 2;             #Float32  #(Input) NA                                              #(Output) time spent compiling
+  const CU_JIT_INFO_LOG_BUFFER = 3;       #char*    #(Input) Pointer to buffer for log message storage       #(Output) NA
+  const CU_JIT_INFO_LOG_BUFFER_SIZE = 4;  #Uint32   #(Input) Size of Log Buffer in bytes                     #(Output) Bytes actually used
+  const CU_JIT_ERROR_LOG_BUFFER = 5;      #char*    #(Input) Pointer to buffer for error message storage     #(Output) NA
+  const CU_JIT_ERROR_LOG_BUFFER_SIZE = 6; #Uint32   #(Input) Size of Error Buffer in bytes                   #(Output) Bytes actually used
+  const CU_JIT_OPTIMIZATION_LEVEL = 7;    #Uint32   #(Input) Level of optimize wanted 4 is max and default   #(Output) NA
+  const CU_JIT_TARGET_FROM_CUCONTEXT = 8; #NONE     #(Input) NA  	                                          #(Output) NA
+  const CU_JIT_TARGET = 9;                #Uint32   #(Input) Choose target based on this input
+    const CU_TARGET_COMPUTE_10 = 0;
+    const CU_TARGET_COMPUTE_11 = 1;
+    const CU_TARGET_COMPUTE_12 = 2;
+    const CU_TARGET_COMPUTE_13 = 3;
+    const CU_TARGET_COMPUTE_20 = 4;
+    const CU_TARGET_COMPUTE_21 = 5;
+    const CU_TARGET_COMPUTE_30 = 6;
+  const CU_JIT_FALLBACK_STRATEGY = 10;    #Uint32   #(Input) Choose fallback stratagy based on parameter 
+    const CU_PREFER_PTX     = 0;
+    const CU_PREFER_BINARY  = 1;
+
+const CUjit_option_c_types = dict(
+  (CU_JIT_MAX_REGISTERS,CU_JIT_THREADS_PER_BLOCK,CU_JIT_WALL_TIME,CU_JIT_INFO_LOG_BUFFER,
+   CU_JIT_INFO_LOG_BUFFER_SIZE,CU_JIT_ERROR_LOG_BUFFER,CU_JIT_ERROR_LOG_BUFFER_SIZE,CU_JIT_OPTIMIZATION_LEVEL,
+   CU_JIT_TARGET_FROM_CUCONTEXT,CU_JIT_TARGET,CU_JIT_FALLBACK_STRATEGY),
+  (Uint32,Uint32,Float32,Ptr{Uint8},
+   Uint32,Ptr{Uint8},Uint32,Uint32,
+   (),Uint32,Uint32));
+
+const CUjit_option_julia_types = dict(
+  (CU_JIT_MAX_REGISTERS,CU_JIT_THREADS_PER_BLOCK,CU_JIT_WALL_TIME,CU_JIT_INFO_LOG_BUFFER,
+   CU_JIT_INFO_LOG_BUFFER_SIZE,CU_JIT_ERROR_LOG_BUFFER,CU_JIT_ERROR_LOG_BUFFER_SIZE,CU_JIT_OPTIMIZATION_LEVEL,
+   CU_JIT_TARGET_FROM_CUCONTEXT,CU_JIT_TARGET,CU_JIT_FALLBACK_STRATEGY),
+  (Uint32,Uint32,Float32,Array{Uint8},
+   Uint32,Array{Uint8},Uint32,Uint32,
+   (),Uint32,Uint32));
+
 
 ## custom functions
 
@@ -42,6 +91,8 @@ function jlcuCheck(v)
     error("CUDA Call Error($v): Out Of Memory")
   elseif CUresult_not_initialized == v
     error("CUDA Call Error($v): Not Initialized")
+  elseif CUresult_invalid_context == v
+    error("CUDA Call Error($v): Invalid Context")
   else
     error("CUDA Call Error($v) #### NOT TRANSLATED ####")
   end
@@ -62,13 +113,6 @@ function jlcuDeviceList()
   end
 end
 
-## Library functions
-
-function cuInit(flags)
-  jlcuCheck(ccall(dlsym(libcuda,:cuInit),CUresult,(Uint,), flags))
-end
-
-cuInit() = cuInit(0)
 
 ## Driver function
 
@@ -79,6 +123,20 @@ function cuDriverGetVersion()
   jlcuCheck(ccall(dlsym(libcuda,:cuDriverGetVersion),CUresult,(Ptr{Int32},), version))
   return version[1]
 end
+
+const CUDA_API_VERSION = cuDriverGetVersion();
+
+
+
+## Library functions
+
+function cuInit(flags)
+  jlcuCheck(ccall(dlsym(libcuda,:cuInit),CUresult,(Uint,), flags))
+end
+
+cuInit() = cuInit(0)
+
+
 
 ## Device Management
 
@@ -118,102 +176,140 @@ end
 
 ## Context Management
 
-function cuCtxCreate(flags::Uint32,hdev::CUdevice)
-  context = Array(CUcontext,1)
-  jlcuCheck(ccall(dlsym(libcuda,:cuCtxCreate),CUresult,(Ptr{CUcontext},Uint32,CUdevice),context,flags,hdev))
-  return context[1]
+if CUDA_API_VERSION >= 3020
+  function cuCtxCreate(flags::Uint32,hdev::CUdevice)
+    context = Array(CUcontext,1)
+    jlcuCheck(ccall(dlsym(libcuda,:cuCtxCreate_v2),CUresult,(Ptr{CUcontext},Uint32,CUdevice),context,flags,hdev))
+    return context[1]
+  end
+else
+  function cuCtxCreate(flags::Uint32,hdev::CUdevice)
+    context = Array(CUcontext,1)
+    jlcuCheck(ccall(dlsym(libcuda,:cuCtxCreate),CUresult,(Ptr{CUcontext},Uint32,CUdevice),context,flags,hdev))
+    return context[1]
+  end
 end
 
-function cuCtxDestroy(context::CUcontext)
-  jlcuCheck(ccall(dlsym(libcuda,:cuCtxDestroy),CUresult,(CUcontext,),context))
-  return ()
+if CUDA_API_VERSION >= 4000
+  function cuCtxDestroy(context::CUcontext)
+    jlcuCheck(ccall(dlsym(libcuda,:cuCtxDestroy_v2),CUresult,(CUcontext,),context))
+    return ()
+  end
+else
+  function cuCtxDestroy(context::CUcontext)
+    jlcuCheck(ccall(dlsym(libcuda,:cuCtxDestroy),CUresult,(CUcontext,),context))
+    return ()
+  end
 end
 
 function cuCtxGetApiVersion(context::CUcontext)
   version = Array(Uint32,1)
-  jlcucheck(ccall(dlsym(libcuda,:cuCtxGetApiVersion,CUresult,(CUcontext,Ptr{Uint32}),context,version)))
+  jlcuCheck(ccall(dlsym(libcuda,:cuCtxGetApiVersion),CUresult,(CUcontext,Ptr{Uint32}),context,version))
   return version[1]
 end
 
 function cuCtxGetCacheConfig()
   config = Array(CUfunc_cache,1)
-  jlcucheck(ccall(dlsym(libcuda,:cuCtxGetCacheConfig,CUresult,(Ptr{CUfunc_cache},),config)))
+  jlcuCheck(ccall(dlsym(libcuda,:cuCtxGetCacheConfig),CUresult,(Ptr{CUfunc_cache},),config))
   return config[1]
 end
 
 function cuCtxGetDevice()
   device = Array(CUdevice,1)
-  jlcucheck(ccall(dlsym(libcuda,:cuCtxGetDevice,CUresult,(Ptr{CUdevice},),device)))
+  jlcuCheck(ccall(dlsym(libcuda,:cuCtxGetDevice),CUresult,(Ptr{CUdevice},),device))
   return device[1]
 end
 
 function cuCtxGetLimit(limit::CUlimit)
   value = Array(CUsize_t,1)
-  jlcucheck(ccall(dlsym(libcuda,:cuCtxGetLimit,CUresult,(Ptr{CUsize_t},CUlimit),value,limit)))
+  jlcuCheck(ccall(dlsym(libcuda,:cuCtxGetLimit),CUresult,(Ptr{CUsize_t},CUlimit),value,limit))
   return value[1]
 end
 
-function cuCtxPopCurrent()
-  ctx = Array(CUcontext,1)
-  jlcucheck(ccall(dlsym(libcuda,:cuCtxPopCurrent,CUresult,(Ptr{CUcontext},),ctx)))
-  return ctx[1]
+if CUDA_API_VERSION >= 4000
+  function cuCtxPopCurrent()
+    ctx = Array(CUcontext,1)
+    jlcuCheck(ccall(dlsym(libcuda,:cuCtxPopCurrent_v2),CUresult,(Ptr{CUcontext},),ctx))
+    return ctx[1]
+  end
+else
+ function cuCtxPopCurrent()
+    ctx = Array(CUcontext,1)
+    jlcuCheck(ccall(dlsym(libcuda,:cuCtxPopCurrent),CUresult,(Ptr{CUcontext},),ctx))
+    return ctx[1]
+  end
 end
 
-function cuCtxPushCurrent(ctx::CUcontext)
-  jlcucheck(ccall(dlsym(libcuda,:cuCtxPushCurrent,CUresult,(CUcontext,),ctx)))
+if CUDA_API_VERSION >= 4000
+  function cuCtxPushCurrent(ctx::CUcontext)
+    jlcuCheck(ccall(dlsym(libcuda,:cuCtxPushCurrenti_v2),CUresult,(CUcontext,),ctx))
+  end
+else
+  function cuCtxPushCurrent(ctx::CUcontext)
+    jlcuCheck(ccall(dlsym(libcuda,:cuCtxPushCurrent),CUresult,(CUcontext,),ctx))
+  end
 end
 
 function cuCtxSetCacheConfig(config::CUfunc_cache)
-  jlcucheck(ccall(dlsym(libcuda,:cuCtxSetCacheConfig,CUresult,(CUfunc_cache,),config)))
+  jlcuCheck(ccall(dlsym(libcuda,:cuCtxSetCacheConfig),CUresult,(CUfunc_cache,),config))
 end
 
 function cuCtxSetCurrent(ctx::CUcontext)
-  jlcucheck(ccall(dlsym(libcuda,:cuCtxSetCurrent,CUresult,(CUcontext,),ctx)))
+  jlcuCheck(ccall(dlsym(libcuda,:cuCtxSetCurrent),CUresult,(CUcontext,),ctx))
 end
 
 function cuCtxSetLimit(limit::CUlimit,value::CUsize_t)
-  jlcucheck(ccall(dlsym(libcuda,:cuCtxSetLimit,CUresult,(CUlimit,CUsize_t),limit,value)))
+  jlcuCheck(ccall(dlsym(libcuda,:cuCtxSetLimit),CUresult,(CUlimit,CUsize_t),limit,value))
 end
 
 function cuCtxSynchronize()
-  jlcucheck(ccall(dlsym(libcuda,:cuCtxSynchronize,CUresult,())))
+  jlcuCheck(ccall(dlsym(libcuda,:cuCtxSynchronize),CUresult,()))
 end
 
 ### Module Management
 function cuModuleGetFunction(hmod::CUmodule,name::String)
   func = Array(CUfunction,1)
-  jlcucheck(ccall(dlsym(libcuda,:cuModuleGetFunction,CUresult,(Ptr{CUfunction},CUmodule,Ptr{Uint8}),func,hmod,cstring(name))))
+  jlcuCheck(ccall(dlsym(libcuda,:cuModuleGetFunction),CUresult,(Ptr{CUfunction},CUmodule,Ptr{Uint8}),func,hmod,cstring(name)))
   return func[1]
 end
 
-function cuModuleGetGlobal(hmod::CUmodule,name::String)
-  dptr = Array(CUdeviceptr,1);
-  bytes = Array(CUsize_t,1);
-  jlcucheck(ccall(dlsym(libcuda,:cuModuleGetGlobal,CUresult,(Ptr{CUdeviceptr},Ptr{CUsize_t},CUmodule,Ptr{Uint8}),dptr,bytes,hmod,cstring(name))))
-  return (dptr[1],bytes[1])
+if CUDA_API_VERSION >= 3020
+  function cuModuleGetGlobal(hmod::CUmodule,name::String)
+    dptr = Array(CUdeviceptr,1);
+    bytes = Array(CUsize_t,1);
+    jlcuCheck(ccall(dlsym(libcuda,:cuModuleGetGlobal_v2),CUresult,(Ptr{CUdeviceptr},Ptr{CUsize_t},CUmodule,Ptr{Uint8}),dptr,bytes,hmod,cstring(name)))
+    return (dptr[1],bytes[1])
+  end
+else
+  function cuModuleGetGlobal(hmod::CUmodule,name::String)
+    dptr = Array(CUdeviceptr,1);
+    bytes = Array(CUsize_t,1);
+    jlcuCheck(ccall(dlsym(libcuda,:cuModuleGetGlobal),CUresult,(Ptr{CUdeviceptr},Ptr{CUsize_t},CUmodule,Ptr{Uint8}),dptr,bytes,hmod,cstring(name)))
+    return (dptr[1],bytes[1])
+  end
 end
 
 function cuModuleGetSurfRef(hmod::CUmodule,name::String)
   surfRef = Array(CUsurfref,1);
-  jlcucheck(ccall(dlsym(libcuda,:cuModuleGetSurfRef,CUresult,(Ptr{CUsurfref},CUmodule,Ptr{Uint8}),surfRef,hmod,cstring(name))))
+  jlcuCheck(ccall(dlsym(libcuda,:cuModuleGetSurfRef),CUresult,(Ptr{CUsurfref},CUmodule,Ptr{Uint8}),surfRef,hmod,cstring(name)))
   return surfRef[1]
 end
 
 function cuModuleGetTexRef(hmod::CUmodule,name::String)
   texRef = Array(CUtexref,1);
-  jlcucheck(ccall(dlsym(libcuda,:cuModuleGetTexRef,CUresult,(Ptr{CUtexref},CUmodule,Ptr{Uint8}),texRef,hmod,cstring(name))))
+  jlcuCheck(ccall(dlsym(libcuda,:cuModuleGetTexRef),CUresult,(Ptr{CUtexref},CUmodule,Ptr{Uint8}),texRef,hmod,cstring(name)))
   return texRef[1]
 end
 
 function cuModuleLoad(fname::String)
   hmod = Array(CUmodule,1);
-  jlcucheck(ccall(dlsym(libcuda,:cuModuleLoad,CUresult,(Ptr{CUmodule},Ptr{Uint8}),hmod,cstring(name))))
+  jlcuCheck(ccall(dlsym(libcuda,:cuModuleLoad),CUresult,(Ptr{CUmodule},Ptr{Uint8}),hmod,cstring(name)))
   return hmod[1]
 end
 
 function cuModuleLoadData_base(image)
   hmod = Array(CUmodule,1);
-  jlcucheck(ccall(dlsym(libcuda,:cuModuleLoadData,CUresult,(Ptr{CUmodule},Ptr{Uint8}),hmod,image)))
+  jlcuCheck(ccall(dlsym(libcuda,:cuModuleLoadData),CUresult,(Ptr{CUmodule},Ptr{Uint8}),hmod,image))
   return hmod[1]
 end
 
@@ -225,50 +321,183 @@ function cuModuleLoadData(image::Array{Uint8})
   return cuModuleLoadData_base(image)
 end
 
-function cuModuleLoadDataEx_base(image)
+function cuModuleLoadDataEx_base(image,options...)
   hmod = Array(CUmodule,1);
-  jlcucheck(ccall(dlsym(libcuda,:cuModuleLoadDataEx,CUresult,(Ptr{CUmodule},Ptr{Uint8},Uint32,Ptr{CUjit_option},Ptr{Ptr{void}}),hmod,image,numOptions,options,optionValues)))
-  return hmod[1]
+  # build options ids and values storage
+  optionIds = Array(CUjit_option,0);
+  optionValues = Array(Any,0);
+  optionValuePtrs = Array(Ptr{void},numOptions);
+
+  local idx = 1;
+  while idx <= numel(options)
+    option = options[idx];
+    if !has(CUjit_options_julia_types,options[idx])
+      error("Unknown Options: ",option);
+    end
+    optionJuliaType = CUjit_options_julia_types[option];
+    optionCType = CUjit_options_c_types[option];
+    push(optionIds,option);
+
+    if optionJuliaType == ()
+      push(optionValues,());
+      push(optionValuePtrs,0);
+    elseif idx >= numel(options)
+      error("Missing Value after: ",option);
+    else
+      ++idx
+      optionValue = options[idx];
+      optionValue = convert(optionJuliaType,optionValue);
+      push(optionValues,optionValue);
+      push(optionValuePtrs,convert(optionCType,optionValue));
+    end
+    ++idx;
+  end 
+  numOptions = size(options);
+
+  jlcuCheck(ccall(dlsym(libcuda,:cuModuleLoadDataEx),CUresult,(Ptr{CUmodule},Ptr{Uint8},Uint32,Ptr{CUjit_option},Ptr{Ptr{void}}),hmod,image,numOptions,optionIds,optionValuesPtrs))
+  return (hmod[1],optionIds,optionValues)
 end
 
-#CUresult 	cuModuleLoadDataEx (CUmodule *module, const void *image, unsigned int numOptions, CUjit_option *options, void **optionValues)
-# 	Load a module's data with options.
+function cuModuleLoadDataEx(image::String,options...)
+  return cuModuleLoadDataEx_base(cstring(image),options...)
+end
+
+function cuModuleLoadData(image::Array{Uint8},options...)
+  return cuModuleLoadDataEx_base(image,options...)
+end
 
 function cuModuleLoadFatBinary(image::Array{Uint8})
   hmod = Array(CUmodule,1);
-  jlcucheck(ccall(dlsym(libcuda,:cuModuleLoadFatBinary,CUresult,(Ptr{CUmodule},Ptr{Uint8}),hmod,image)))
+  jlcuCheck(ccall(dlsym(libcuda,:cuModuleLoadFatBinary),CUresult,(Ptr{CUmodule},Ptr{Uint8}),hmod,image))
   return hmod[1]
 end
 
 function cuModuleUnload(hmod::CUmodule)
-  jlcucheck(ccall(dlsym(libcuda,:cuModuleUnload,CUresult,(CUmodule,),hmod)))
+  jlcuCheck(ccall(dlsym(libcuda,:cuModuleUnload),CUresult,(CUmodule,),hmod))
 end
 
 
 ### Memory Management
-#CUresult 	cuArray3DCreate (CUarray *pHandle, const CUDA_ARRAY3D_DESCRIPTOR *pAllocateArray)
-# 	Creates a 3D CUDA array.
-#CUresult 	cuArray3DGetDescriptor (CUDA_ARRAY3D_DESCRIPTOR *pArrayDescriptor, CUarray hArray)
-# 	Get a 3D CUDA array descriptor.
-#CUresult 	cuArrayCreate (CUarray *pHandle, const CUDA_ARRAY_DESCRIPTOR *pAllocateArray)
-# 	Creates a 1D or 2D CUDA array.
-#CUresult 	cuArrayDestroy (CUarray hArray)
-# 	Destroys a CUDA array.
-#CUresult 	cuArrayGetDescriptor (CUDA_ARRAY_DESCRIPTOR *pArrayDescriptor, CUarray hArray)
-# 	Get a 1D or 2D CUDA array descriptor.
-#CUresult 	cuDeviceGetByPCIBusId (CUdevice *dev, char *pciBusId)
-# 	Returns a handle to a compute device.
-#CUresult 	cuDeviceGetPCIBusId (char *pciBusId, int len, CUdevice dev)
-# 	Returns a PCI Bus Id string for the device.
-#CUresult 	cuIpcCloseMemHandle (CUdeviceptr dptr)
-#CUresult 	cuIpcGetEventHandle (CUipcEventHandle *pHandle, CUevent event)
-# 	Gets an interprocess handle for a previously allocated event.
-#CUresult 	cuIpcGetMemHandle (CUipcMemHandle *pHandle, CUdeviceptr dptr)
-#CUresult 	cuIpcOpenEventHandle (CUevent *phEvent, CUipcEventHandle handle)
-# 	Opens an interprocess event handle for use in the current process.
-#CUresult 	cuIpcOpenMemHandle (CUdeviceptr *pdptr, CUipcMemHandle handle, unsigned int Flags)
-#CUresult 	cuMemAlloc (CUdeviceptr *dptr, size_t bytesize)
-# 	Allocates device memory.
+cuMemGetInfo_symbol = :cuMemGetInfo;
+cuMemAlloc_symbol = :cuMemAlloc;
+cuMemFree_symbol = :cuMemFree;
+cuMemcpyHtoD_symbol = :cuMemcpyHtoD;
+cuMemcpyDtoH_symbol = :cuMemcpyDtoH;
+cuMemcpyDtoD_symbol = :cuMemcpyDtoD;
+cuMemcpyHtoDAsync_symbol = :cuMemcpyHtoDAsync;
+cuMemcpyDtoHAsync_symbol = :cuMemcpyDtoHAsync;
+cuMemcpyDtoDAsync_symbol = :cuMemcpyDtoDAsync;
+cuMemsetD8_symbol = :cuMemsetD8;
+cuMemsetD8Async_symbol = :cuMemsetD8Async;
+cuMemsetD16_symbol = :cuMemsetD16;
+cuMemsetD16Async_symbol = :cuMemsetD16Async;
+cuMemsetD32_symbol = :cuMemsetD32;
+cuMemsetD32Async_symbol = :cuMemsetD32Async;
+
+if CUDA_API_VERSION >= 3020
+  cuMemGetInfo_symbol = :cuMemGetInfo_v2;
+  cuMemAlloc_symbol = :cuMemAlloc_v2;
+  cuMemFree_symbol = :cuMemFree_v2;
+  cuMemcpyHtoD_symbol = :cuMemcpyHtoD_v2;
+  cuMemcpyDtoH_symbol = :cuMemcpyDtoH_v2;
+  cuMemcpyDtoD_symbol = :cuMemcpyDtoD_v2;
+  cuMemcpyHtoDAsync_symbol = :cuMemcpyHtoDAsync_v2;
+  cuMemcpyDtoHAsync_symbol = :cuMemcpyDtoHAsync_v2;
+  cuMemcpyDtoDAsync_symbol = :cuMemcpyDtoDAsync_v2;
+  cuMemsetD8_symbol = :cuMemsetD8_v2;
+  cuMemsetD16_symbol = :cuMemsetD16_v2;
+  cuMemsetD32_symbol = :cuMemsetD32_v2;
+end
+
+
+@eval function cuMemGetInfo()
+  freeD = Array(CUsize_t,1);
+  totalD = Array(CUsize_t,1);
+  jlcuCheck(ccall(dlsym(libcuda,:($cuMemGetInfo_symbol)),CUresult,(Ptr{CUsize_t},Ptr{CUsize_t}),freeD,totalD))
+  return (freeD[1],totalD[1])
+end
+
+@eval function cuMemAlloc(byteSize)
+  dptr = Array(CUdeviceptr,1);
+  jlcuCheck(ccall(dlsym(libcuda,:($cuMemAlloc_symbol)),CUresult,(Ptr{CUdeviceptr},CUsize_t),dptr,byteSize))
+  return dptr[1]
+end
+
+@eval function cuMemFree(dptr)
+  jlcuCheck(ccall(dlsym(libcuda,:($cuMemFree_symbol)),CUresult,(CUdeviceptr,),dptr))
+end
+
+@eval function cuMemcpyDtoD(dstDevice,srcDevice,byteCount)
+  jlcuCheck(ccall(dlsym(libcuda,:($cuMemcpyDtoD_symbol)),CUresult,(CUdeviceptr,CUdeviceptr,CUsize_t),dstDevice,srcDevice,byteCount))
+end
+
+@eval function cuMemcpyDtoDAsync(dstDevice,srcDevice,byteCount,hStream) 
+  jlcuCheck(ccall(dlsym(libcuda,:($cuMemcpyDtoDAsync_symbol)),CUresult,(CUdeviceptr,CUdeviceptr,CUsize_t,CUstream),dstDevice,srcDevice,byteCount,hStream))
+end
+
+@eval function cuMemcpyDtoH(dstHost,srcDevice,byteCount)
+  jlcuCheck(ccall(dlsym(libcuda,:($cuMemcpyDtoH_symbol)),CUresult,(Ptr{Void},CUdeviceptr,CUsize_t),dstHost,srcDevice,byteCount))
+end
+
+@eval function cuMemcpyDtoHAsync(dstHost,srcDevice,byteCount,hStream)
+  jlcuCheck(ccall(dlsym(libcuda,:($cuMemcpyDtoHAsync_symbol)),CUresult,(Ptr{Void},CUdeviceptr,CUsize_t,CUstream),dstHost,srcDevice,byteCount,hStream))
+end
+
+@eval function cuMemcpyHtoD(dstDevice,srcHost,byteCount)
+  jlcuCheck(ccall(dlsym(libcuda,:($cuMemcpyHtoD_symbol)),CUresult,(CUdeviceptr,Ptr{Void},CUsize_t),dstDevice,srcHost,byteCount))
+end
+
+@eval function cuMemcpyHtoDAsync(dstDevice,srcHost,byteCount,hStream)
+  jlcuCheck(ccall(dlsym(libcuda,:($cuMemcpyHtoDAsync_symbol)),CUresult,(CUdeviceptr,Ptr{Void},CUsize_t,CUstream),dstDevice,srcHost,byteCount,hStream))
+end
+
+
+@eval function cuMemsetD8(dstDevice,val,count)
+  jlcuCheck(ccall(dlsym(libcuda,:($cuMemsetD8_symbol)),CUresult,(CUdeviceptr,Uint8,CUsize_t),dstDevice,val,count))
+end
+
+@eval function cuMemcpyD8Async(dstDevice,val,count,hStream)
+  jlcuCheck(ccall(dlsym(libcuda,:($cuMemsetD8Async_symbol)),CUresult,(CUdeviceptr,Uint8,CUsize_t,CUstream),dstDevice,val,count,hStream))
+end
+
+@eval function cuMemsetD16(dstDevice,val,count)
+  jlcuCheck(ccall(dlsym(libcuda,:($cuMemsetD16_symbol)),CUresult,(CUdeviceptr,Uint16,CUsize_t),dstDevice,val,count))
+end
+
+@eval function cuMemcpyD16Async(dstDevice,val,count,hStream)
+  jlcuCheck(ccall(dlsym(libcuda,:($cuMemsetD16Async_symbol)),CUresult,(CUdeviceptr,Uint16,CUsize_t,CUstream),dstDevice,val,count,hStream))
+end
+
+@eval function cuMemsetD32(dstDevice,val,count)
+  jlcuCheck(ccall(dlsym(libcuda,:($cuMemsetD32_symbol)),CUresult,(CUdeviceptr,Uint32,CUsize_t),dstDevice,val,count))
+end
+
+@eval function cuMemcpyD32Async(dstDevice,val,count,hStream)
+  jlcuCheck(ccall(dlsym(libcuda,:($cuMemsetD32Async_symbol)),CUresult,(CUdeviceptr,Uint32,CUsize_t,CUstream),dstDevice,val,count,hStream))
+end
+
+
+#CUresult       cuArray3DCreate (CUarray *pHandle, const CUDA_ARRAY3D_DESCRIPTOR *pAllocateArray)
+#       Creates a 3D CUDA array.
+#CUresult       cuArray3DGetDescriptor (CUDA_ARRAY3D_DESCRIPTOR *pArrayDescriptor, CUarray hArray)
+#       Get a 3D CUDA array descriptor.
+#CUresult       cuArrayCreate (CUarray *pHandle, const CUDA_ARRAY_DESCRIPTOR *pAllocateArray)
+#       Creates a 1D or 2D CUDA array.
+#CUresult       cuArrayDestroy (CUarray hArray)
+#       Destroys a CUDA array.
+#CUresult       cuArrayGetDescriptor (CUDA_ARRAY_DESCRIPTOR *pArrayDescriptor, CUarray hArray)
+#       Get a 1D or 2D CUDA array descriptor.
+#CUresult       cuDeviceGetByPCIBusId (CUdevice *dev, char *pciBusId)
+#       Returns a handle to a compute device.
+#CUresult       cuDeviceGetPCIBusId (char *pciBusId, int len, CUdevice dev)
+#       Returns a PCI Bus Id string for the device.
+#CUresult       cuIpcCloseMemHandle (CUdeviceptr dptr)
+#CUresult       cuIpcGetEventHandle (CUipcEventHandle *pHandle, CUevent event)
+#       Gets an interprocess handle for a previously allocated event.
+#CUresult       cuIpcGetMemHandle (CUipcMemHandle *pHandle, CUdeviceptr dptr)
+#CUresult       cuIpcOpenEventHandle (CUevent *phEvent, CUipcEventHandle handle)
+#       Opens an interprocess event handle for use in the current process.
+#CUresult       cuIpcOpenMemHandle (CUdeviceptr *pdptr, CUipcMemHandle handle, unsigned int Flags)
 #CUresult 	cuMemAllocHost (void **pp, size_t bytesize)
 # 	Allocates page-locked host memory.
 #CUresult 	cuMemAllocPitch (CUdeviceptr *dptr, size_t *pPitch, size_t WidthInBytes, size_t Height, unsigned int ElementSizeBytes)
@@ -301,28 +530,14 @@ end
 # 	Copies memory from Array to Host.
 #CUresult 	cuMemcpyDtoA (CUarray dstArray, size_t dstOffset, CUdeviceptr srcDevice, size_t ByteCount)
 # 	Copies memory from Device to Array.
-#CUresult 	cuMemcpyDtoD (CUdeviceptr dstDevice, CUdeviceptr srcDevice, size_t ByteCount)
-# 	Copies memory from Device to Device.
-#CUresult 	cuMemcpyDtoDAsync (CUdeviceptr dstDevice, CUdeviceptr srcDevice, size_t ByteCount, CUstream hStream)
-# 	Copies memory from Device to Device.
-#CUresult 	cuMemcpyDtoH (void *dstHost, CUdeviceptr srcDevice, size_t ByteCount)
-# 	Copies memory from Device to Host.
-#CUresult 	cuMemcpyDtoHAsync (void *dstHost, CUdeviceptr srcDevice, size_t ByteCount, CUstream hStream)
-# 	Copies memory from Device to Host.
-#CUresult 	cuMemcpyHtoA (CUarray dstArray, size_t dstOffset, const void *srcHost, size_t ByteCount)
-# 	Copies memory from Host to Array.
-#CUresult 	cuMemcpyHtoAAsync (CUarray dstArray, size_t dstOffset, const void *srcHost, size_t ByteCount, CUstream hStream)
-# 	Copies memory from Host to Array.
-#CUresult 	cuMemcpyHtoD (CUdeviceptr dstDevice, const void *srcHost, size_t ByteCount)
-# 	Copies memory from Host to Device.
-#CUresult 	cuMemcpyHtoDAsync (CUdeviceptr dstDevice, const void *srcHost, size_t ByteCount, CUstream hStream)
-# 	Copies memory from Host to Device.
+#CUresult       cuMemcpyHtoA (CUarray dstArray, size_t dstOffset, const void *srcHost, size_t ByteCount)
+#       Copies memory from Host to Array.
+#CUresult       cuMemcpyHtoAAsync (CUarray dstArray, size_t dstOffset, const void *srcHost, size_t ByteCount, CUstream hStream)
+#       Copies memory from Host to Array.
 #CUresult 	cuMemcpyPeer (CUdeviceptr dstDevice, CUcontext dstContext, CUdeviceptr srcDevice, CUcontext srcContext, size_t ByteCount)
 # 	Copies device memory between two contexts.
 #CUresult 	cuMemcpyPeerAsync (CUdeviceptr dstDevice, CUcontext dstContext, CUdeviceptr srcDevice, CUcontext srcContext, size_t ByteCount, CUstream hStream)
 # 	Copies device memory between two contexts asynchronously.
-#CUresult 	cuMemFree (CUdeviceptr dptr)
-# 	Frees device memory.
 #CUresult 	cuMemFreeHost (void *p)
 # 	Frees page-locked host memory.
 #CUresult 	cuMemGetAddressRange (CUdeviceptr *pbase, size_t *psize, CUdeviceptr dptr)
@@ -359,11 +574,8 @@ end
 # 	Initializes device memory.
 #CUresult 	cuMemsetD32Async (CUdeviceptr dstDevice, unsigned int ui, size_t N, CUstream hStream)
 # 	Sets device memory.
-#CUresult 	cuMemsetD8 (CUdeviceptr dstDevice, unsigned char uc, size_t N)
-# 	Initializes device memory.
-#CUresult 	cuMemsetD8Async (CUdeviceptr dstDevice, unsigned char uc, size_t N, CUstream hStream)
-# 	Sets device memory. 
-#
+
+
 ### Stream Management
 #CUresult 	cuStreamCreate (CUstream *phStream, unsigned int Flags)
 # 	Create a stream.
@@ -398,3 +610,48 @@ end
 #CUresult 	cuLaunchKernel (CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ, unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ, unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra)
 # 	Launches a CUDA function. 
 #
+
+function cudaTest()
+  global ctxt = cuCtxCreate(convert(Uint32,0),convert(Int32,0));
+  (freeD,totalD) = cuMemGetInfo(); println("Free: ",freeD," Total: ",totalD);
+
+  N = 128*1024*1024;
+  @time buffer = cuMemAlloc(N * 4);
+  (freeD,totalD) = cuMemGetInfo(); println("Free: ",freeD," Total: ",totalD);
+
+  tt = @elapsed a = Array(Float32,N);
+  println("time: ",tt," rate(MB/s): ",(N*4.0)/(1024.0^2)/tt)
+  tt = @elapsed a[:] = randn(N);
+  println("time: ",tt," rate(MB/s): ",(N*4.0)/(1024.0^2)/tt)
+  tt = @elapsed b = Array(Float32,N);
+  println("time: ",tt," rate(MB/s): ",(N*4.0)/(1024.0^2)/tt)
+  tt = @elapsed b[:] = 0;
+  println("time: ",tt," rate(MB/s): ",(N*4.0)/(1024.0^2)/tt)
+
+  println("--------------");
+  
+  println("a -> GPU: start: ",a[1:10]);
+  tt = @elapsed cuMemcpyHtoD(buffer,a,N*4);
+  println("Transfer time: ",tt," rate: ",(N * 4.0)/(1024.0 * 1024.0)/tt," MB/s");
+  println("a -> GPU: done: ",a[1:10]);
+
+  println("--------------");
+
+  println("GPU -> b: start: ",b[1:10]);
+  tt = @elapsed cuMemcpyDtoH(b,buffer,N*4);
+  println("Transfer time: ",tt," rate: ",(N * 4.0)/(1024.0 * 1024.0)/tt," MB/s");
+  println("GPU -> b: done: ",b[1:10]);
+  
+  println("--------------");
+
+  cuMemFree(buffer)
+  (freeD,totalD) = cuMemGetInfo(); println("Free: ",freeD," Total: ",totalD);
+  
+  cuCtxDestroy(ctxt)
+
+  tt = @elapsed  matchRes = all(a == b);
+  println(" a == b: ",matchRes)
+  println("time: ",tt," rate(MB/s): ",(N*4.0)/(1024.0^2)/tt)
+
+  println("--------------");
+end
