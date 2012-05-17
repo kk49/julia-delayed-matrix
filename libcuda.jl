@@ -323,6 +323,8 @@ function cuModuleLoadData(image::Array{Uint8})
   return cuModuleLoadData_base(image)
 end
 
+
+# reference http://developer.download.nvidia.com/compute/cuda/4_2/rel/toolkit/docs/online/group__CUDA__MODULE_g9e8047e9dbf725f0cd7cafd18bfd4d12.html
 function cuModuleLoadDataEx_base(image,options...)
   hmod = Array(CUmodule,1);
   # build options ids and values storage
@@ -604,14 +606,29 @@ end
 #CUresult 	cuEventSynchronize (CUevent hEvent)
 # 	Waits for an event to complete. 
 #
+
 ### Execution Control
-#CUresult 	cuFuncGetAttribute (int *pi, CUfunction_attribute attrib, CUfunction hfunc)
-# 	Returns information about a function.
-#CUresult 	cuFuncSetCacheConfig (CUfunction hfunc, CUfunc_cache config)
-# 	Sets the preferred cache configuration for a device function.
-#CUresult 	cuLaunchKernel (CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ, unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ, unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra)
+function cuFuncSetCacheConfig (hfunc::CUfunction,config::CUfunc_cache)
+  jlcuCheck(ccall(dlsym(libcuda,:cuFuncSetCacheConfig),CUresult,(CUfunction,CUfunc_cache),hfunc,config))
+end
+
+# reference http://developer.download.nvidia.com/compute/cuda/4_2/rel/toolkit/docs/online/group__CUDA__EXEC_gb8f3dc3031b40da29d5f9a7139e52e15.html#gb8f3dc3031b40da29d5f9a7139e52e15
+function cuLaunchKernel(
+	f::CUfunction,
+  	gridDimX::Uint32,  gridDimY::Uint32, gridDimZ::Uint32, 
+  	blockDimX::Uint32, blockDimY::Uint32, blockDimZ::Uint32,
+  	sharedMemBytes::Uint32, hStream::CUstream,
+  	kernelParams, extra)
+  jlcuCheck(ccall(dlsym(libcuda,:cuLaunchKernel),CUresult,(CUfunction,Uint32,Uint32,Uint32,Uint32,Uint32,Uint32,Uint32,CUstream,Ptr{Ptr{Void}},Ptr{Ptr{Void}}),
+  	gridDimX,gridDimY,gridDimZ,bloackDimX,blockDimY,blockDimZ,sharedMemBytes,hStream,kernelParams,extra))
+end
+  
 # 	Launches a CUDA function. 
 #
+#CUresult       cuFuncGetAttribute (int *pi, CUfunction_attribute attrib, CUfunction hfunc)
+#       Returns information about a function.
+
+
 
 function cudaTest()
   global ctxt = cuCtxCreate(convert(Uint32,0),convert(Int32,0));
