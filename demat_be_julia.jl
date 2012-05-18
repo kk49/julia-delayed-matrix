@@ -115,6 +115,8 @@ function assign(lhs::DeVecJ,rhs::DeExpr)
     end
 
     hiddenFunc(lhs,rhs)
+
+    return lhs
 end
 
 assign(lhs::DeArrJulia,rhs::DeEle) = assign(lhs,de_promote(rhs)...)

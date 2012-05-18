@@ -29,7 +29,7 @@ type DeArrCuda{T,N} <: DeArr{DeBackEndCuda,T,N}
     me = new(0,0);
     finalizer(me,clear);
     resize(me,numel(a));
-    @time cuMemcpyHtoD(me.ptr,a,me.sz);
+    me[] = a;
     me
   end
 
@@ -37,12 +37,15 @@ type DeArrCuda{T,N} <: DeArr{DeBackEndCuda,T,N}
     me = new(0,0);
     finalizer(me,clear);
     resize(me,n);
-    @time cuMemsetD8(me.ptr,0,me.sz);
     me
   end
-  
+ 
   sz::CUsize_t
   ptr::CUdeviceptr
+end
+
+function numel{T,N}(arr::DeArrCuda{T,N})
+  return arr.sz / sizeof(T);
 end
 
 function clear(arr::DeArrCuda)
@@ -51,7 +54,7 @@ function clear(arr::DeArrCuda)
      arr.sz = 0;
      arr.ptr = 0;
   end
-  arr
+  return arr;
 end
 
 function resize{T,N}(arr::DeArrCuda{T,N},nsz)
@@ -59,9 +62,29 @@ function resize{T,N}(arr::DeArrCuda{T,N},nsz)
   nsz = sizeof(T) * nsz;
   arr.ptr = cuMemAlloc(nsz);
   arr.sz = nsz;
-  arr
+  return arr;
+end
+
+function assign{T,N}(dst::DeArrCuda{T,N},src::Array{T,N})
+    @assert numel(dst) == numel(src);
+    @time cuMemcpyHtoD(dst.ptr,src,dst.sz);
+    return dst;
+end
+
+function assign{T,N}(dst::Array{T,N},src::DeArrCuda{T,N})
+    @assert numel(dst) == numel(src);
+    @time cuMemcpyDtoH(dst,src.ptr,src.sz);
+    return dst;
 end
 
 typealias DeVecCu{T} DeArrCuda{T,1}
 typealias DeMatCu{T} DeArrCuda{T,2}
+
+
+function assign(lhs::DeVecCu,rhs::DeExpr)
+    return lhs
+end
+
+assign(lhs::DeArrCuda,rhs::DeEle) = assign(lhs,de_promote(rhs)...)
+assign(lhs::DeArrCuda,rhs::Number) = assign(lhs,de_promote(rhs)...)
 
