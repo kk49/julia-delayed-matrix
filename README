@@ -19,5 +19,12 @@ To use load("demat.jl")
 # * x[] = v[a:b] (sub view extraction)
 # * (d[c] = a[c]; [~c] = b[~c]) should be converted to "for i = 1:N d[i] = c[i]?a[i]:b[i] end"
 
+#Should DeArrCuda allocate to multiple of warps (32) ? or just you if to skip execution beyond length of vector
+#DeArrCuda{T,1} has ptr,sz (needs numel?,needs Stride)
+#DeArrCuda{T,2} should be different type with stride?
+
+#DeBuffer underlying memory, with total memory used? (include information about how it was allocated with respect to strides?
+#DeView view of underlying DeBuffer? with strides, and sizes
+
 # * A BUNCH OF OTHER STUFF
 
