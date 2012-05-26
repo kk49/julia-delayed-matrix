@@ -7,6 +7,7 @@ To use load("demat.jl")
 
 ## TODO
 # add type for distributed matrixies, initially use to process arrays bigger than can fit on the GPU at one time
+#  - use cuMallocHost to get page locked memory that then can be transfered to and from in parrallel
 # * need scaler / parameter types so that a new kernel is not generated for every new 
 # host side value of a parameter, the user should decide where the placeholders are used
 # * OpenCL is portable and in program buildable but cannot work with Nvidia Cu* libraries (like CuBLAS)

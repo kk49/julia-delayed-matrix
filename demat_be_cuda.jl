@@ -31,7 +31,11 @@ function reset(ctxt::jlCUContext)
   return ctxt;
 end
 
-# memory buffer
+# Host Memory buffer that supports concurrent transfers it is "pinned" (cannot be paged out)
+
+# TODO
+
+# Device memory buffer
 type jlCUBuffer
   function jlCUBuffer()
     me = new(0,0);
