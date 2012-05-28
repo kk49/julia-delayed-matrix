@@ -13,7 +13,7 @@ typealias CUdevice Int32
 typealias CUcontext Ptr{Void}
 typealias CUmodule Ptr{Void}
 typealias CUfunction Ptr{Void}
-typealias CUdeviceptr Uint #64bit with 64 bit library, 32bit with 32bit library...
+typealias CUdeviceptr Ptr{Void} 
 typealias CUevent Ptr{Void}
 typealias CUstream Ptr{Void}
 
@@ -50,8 +50,8 @@ typealias CUjit_options Uint32;
   const CU_JIT_ERROR_LOG_BUFFER = 5;      #char*    #(Input) Pointer to buffer for error message storage     #(Output) NA
   const CU_JIT_ERROR_LOG_BUFFER_SIZE = 6; #Uint32   #(Input) Size of Error Buffer in bytes                   #(Output) Bytes actually used
   const CU_JIT_OPTIMIZATION_LEVEL = 7;    #Uint32   #(Input) Level of optimize wanted 4 is max and default   #(Output) NA
-  const CU_JIT_TARGET_FROM_CUCONTEXT = 8; #NONE     #(Input) NA  	                                          #(Output) NA
-  const CU_JIT_TARGET = 9;                #Uint32   #(Input) Choose target based on this input
+  const CU_JIT_TARGET_FROM_CUCONTEXT = 8; #NONE     #(Input) NA  	                                     #(Output) NA
+  const CU_JIT_TARGET = 9;                #Uint32   #(Input) Choose target based on this input               #(Output) NA
     const CU_TARGET_COMPUTE_10 = 0;
     const CU_TARGET_COMPUTE_11 = 1;
     const CU_TARGET_COMPUTE_12 = 2;
@@ -59,7 +59,7 @@ typealias CUjit_options Uint32;
     const CU_TARGET_COMPUTE_20 = 4;
     const CU_TARGET_COMPUTE_21 = 5;
     const CU_TARGET_COMPUTE_30 = 6;
-  const CU_JIT_FALLBACK_STRATEGY = 10;    #Uint32   #(Input) Choose fallback stratagy based on parameter 
+  const CU_JIT_FALLBACK_STRATEGY = 10;    #Uint32   #(Input) Choose fallback stratagy based on parameter     #(Output) NA 
     const CU_PREFER_PTX     = 0;
     const CU_PREFER_BINARY  = 1;
 

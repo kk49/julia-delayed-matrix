@@ -9,9 +9,9 @@
 load("libcuda.jl")
 
 
-# CUDA objects, should go to different file
+### CUDA objects, should go to different file
 
-# context
+## Context
 type jlCUContext
   function jlCUContext()
     me = new(cuCtxCreate(convert(Uint32,0),convert(Int32,0)));
@@ -31,11 +31,10 @@ function reset(ctxt::jlCUContext)
   return ctxt;
 end
 
-# Host Memory buffer that supports concurrent transfers it is "pinned" (cannot be paged out)
-
+## Host Memory Buffer - that supports concurrent transfers it is "pinned" (cannot be paged out)
 # TODO
 
-# Device memory buffer
+## Device Memory Buffer
 type jlCUBuffer
   function jlCUBuffer()
     me = new(0,0);
@@ -86,13 +85,13 @@ function copyto{T}(dst::Array{T,1},src::jlCUBuffer)
     return dst;
 end
 
-# module
-
-# kernel
+## Module
 
 
+## Kernel
 
-## Delayed matrix backend
+
+### Delayed matrix backend
 type DeBackEndCuda
 end
 
