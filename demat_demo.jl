@@ -45,6 +45,11 @@ function demat_test()
     println("  Time to build (if necessary) and run one iteration: $et seconds")
     et = @elapsed ad[] = bd+cd.*dd + 1.0 
     println("  Time to only run one iteration: $et seconds")
+    et = @elapsed ad[] = bd+cd.*dd + 2.0 
+    println("  Time to only run one iteration (Add 2 instead of 1): $et seconds")
+    et = @elapsed ad[] = bd + 1.0 
+    println("  Time to only run one iteration (replace second operand of top operator): $et seconds")
+
     t3 = @elapsed for i = 1:tN ad[] = bd+cd.*dd + 1.0 end
     #@time ad[] = bd + 1.0 
     println("Elapsed time: $t3")

@@ -60,21 +60,18 @@ for op = deBinOpList
 end
 
 function assign(lhs::DeVecJ,rhs::DeExpr)
-    println("Building New Assign ...");
-    rhsSz = de_check_dims(rhs)
-    lhsSz = size(lhs)
-
-    if rhsSz != lhsSz
-        error("src & dst size does not match. NOT IMPLEMENTED FOR SCALARS FIX")
-    end
-
+  buildTime = @elapsed begin
     @gensym i prhs
     (rhsResult,rhsResultType,rhsPreamble,rhsKernel) = de_jl_eval(rhs,prhs,i)
     rhsType = typeof(rhs);
 
-    global assign
-
-    @eval function assign(plhs::DeVecJ,($prhs)::($rhsType))
+    @eval function assign1(plhs::DeVecJ,($prhs)::($rhsType))        
+        rhsSz = de_check_dims($prhs)
+        lhsSz = size(plhs)
+        if rhsSz != lhsSz
+           error("src & dst size does not match. NOT IMPLEMENTED FOR SCALARS FIX")
+        end
+        
         N = size(plhs,1)
         lhsData = plhs.data
         $rhsPreamble
@@ -86,7 +83,13 @@ function assign(lhs::DeVecJ,rhs::DeExpr)
         return plhs
     end
 
-    return assign(lhs,rhs)
+    global assign
+    @eval assign(plhs::DeVecJ,($prhs)::($rhsType)) = assign1(plhs,$prhs)
+  end
+       
+  println("DeMatJulia: Built New Assign (took $buildTime seconds) ... $rhsType");
+ 
+  return assign1(lhs,rhs)
 end
 
 assign(lhs::DeArrJulia,rhs::DeEle) = assign(lhs,de_promote(rhs)...)

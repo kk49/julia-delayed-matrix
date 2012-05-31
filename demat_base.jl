@@ -76,10 +76,20 @@ de_op_to_scaler[:-] = :-
 de_op_to_scaler[:.*] = :*
 de_op_to_scaler[:./] = :/
 
+
+function DeBuildBinOp(OP,p...)
+  pp = de_promote(p...)
+  return DeBinOp{OP,typeof(pp[1]),typeof(pp[2])}(pp...)
+end
+   
+
 for op = deBinOpList
   opType = de_op_to_type[op];
-  @eval ($op)(a::DeEle,b::Number) = DeBinOp{$opType}(de_promote(a,b)...)
-  @eval ($op)(a::Number,b::DeEle) = DeBinOp{$opType}(de_promote(a,b)...)
-  @eval ($op)(a::DeEle,b::DeEle) =  DeBinOp{$opType}(de_promote(a,b)...)
+  #@eval ($op)(a::DeEle,b::Number) = DeBinOp{$opType}(de_promote(a,b)...)
+  #@eval ($op)(a::Number,b::DeEle) = DeBinOp{$opType}(de_promote(a,b)...)
+  #@eval ($op)(a::DeEle,b::DeEle)  = DeBinOp{$opType}(de_promote(a,b)...)
+  @eval ($op)(a::DeEle,b::Number) = DeBuildBinOp($opType,a,b)
+  @eval ($op)(a::Number,b::DeEle) = DeBuildBinOp($opType,a,b)
+  @eval ($op)(a::DeEle,b::DeEle)  = DeBuildBinOp($opType,a,b)
 end
 
