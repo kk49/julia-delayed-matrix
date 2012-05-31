@@ -26,7 +26,7 @@ function de_jl_eval(a::DeConst,param,idxSym)
     @gensym r
     ( r
     , typeof(a.p1)
-    , quote ($r) = (($param).p1)::($(typeof(a.p1))) end #without type information JIT will not compile this
+    , quote ($r) = ($param).p1 end 
     , quote end
     )
 end
@@ -35,7 +35,7 @@ function de_jl_eval(a::DeReadOp,param,idxSym)
     @gensym r src
     ( r
     , eltype(a.p1.data)
-    , quote ($src) = (($param).p1.data)::($(typeof(a.p1.data))) end #without type information JIT will not compile this
+    , quote ($src) = ($param).p1.data end 
     , quote ($r) = ($src)[($idxSym)] end
     )
 end
@@ -48,7 +48,7 @@ function de_jl_eval{OT}(v::DeBinOp{OT},param,idxSym)
    ( r
    , promote_type(p1[2],p2[2])
    , quote $(p1[3]);$(p2[3]) end
-   , quote $(p1[4]);$(p2[4]);($r) = de_jl_do_op($OT,($(p1[1]))::($(p1[2])),($(p2[1]))::($(p2[2]))) end #type information does not make this faster
+   , quote $(p1[4]);$(p2[4]);($r) = de_jl_do_op($OT,$(p1[1]),$(p2[1])) end 
    )
 end
 
@@ -77,14 +77,14 @@ function assign(lhs::DeVecJ,rhs::DeExpr)
         $rhsPreamble
         for ($i) = 1:N
             $rhsKernel
-            lhsData[($i)] = ($rhsResult)::($rhsResultType) # this does not improve speed...
+            lhsData[($i)] = ($rhsResult)
         end
 
         return plhs
     end
 
     global assign
-    @eval assign(plhs::DeVecJ,($prhs)::($rhsType)) = assign1(plhs,$prhs)
+    @eval assign(lhs::DeVecJ,rhs::($rhsType)) = assign1(lhs,rhs)
   end
        
   println("DeMatJulia: Built New Assign (took $buildTime seconds) ... $rhsType");
