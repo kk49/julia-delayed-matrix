@@ -5,28 +5,3 @@
 For DEMO load("demat_demo.jl") from julia command line
 To use load("demat.jl")
 
-## TODO
-# add type for distributed matrixies, initially use to process arrays bigger than can fit on the GPU at one time
-#  - use cuMallocHost to get page locked memory that then can be transfered to and from in parrallel
-# * need scaler / parameter types so that a new kernel is not generated for every new 
-# host side value of a parameter, the user should decide where the placeholders are used
-# * OpenCL is portable and in program buildable but cannot work with Nvidia Cu* libraries (like CuBLAS)
-# * PTX is low level and not portable, but is in program buildable and can work with Nvidia libraries
-# * de_barrier() or de_barrier(:x,:y) to extract only x & y ?
-# * x[] = v (assignment)
-# * x = v[] (ref)
-# * x[a:s:b] = v (sub view assignment)
-# * x[a:b] = v (sub view assignment)
-# * x[] = v[a:s:b] (sub view extraction)
-# * x[] = v[a:b] (sub view extraction)
-# * (d[c] = a[c]; [~c] = b[~c]) should be converted to "for i = 1:N d[i] = c[i]?a[i]:b[i] end"
-
-#Should DeArrCuda allocate to multiple of warps (32) ? or just you if to skip execution beyond length of vector
-#DeArrCuda{T,1} has ptr,sz (needs numel?,needs Stride)
-#DeArrCuda{T,2} should be different type with stride?
-
-#DeBuffer underlying memory, with total memory used? (include information about how it was allocated with respect to strides?
-#DeView view of underlying DeBuffer? with strides, and sizes
-
-# * A BUNCH OF OTHER STUFF
-
