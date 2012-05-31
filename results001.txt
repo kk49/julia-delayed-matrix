@@ -1,0 +1,36 @@
+before change to julia backend (2012/05/28)
+               _
+   _       _ _(_)_     |
+  (_)     | (_) (_)    |
+   _ _   _| |_  __ _   |  A fresh approach to technical computing
+  | | | | | | |/ _` |  |
+  | | |_| | | | (_| |  |  Version 0.0.0+86211913.r5da5
+ _/ |\__'_|_|_|\__'_|  |  Commit 5da5d40136 (2012-05-16 19:24:19)
+|__/                   |
+
+julia> load("demat_demo.jl")
+0 : Quadro FX 3800M : CC = (1,1) : Mem (MiB) = 1.334036476875e8
+elapsed time: 0.008118867874145508 seconds
+elapsed time: 0.008183956146240234 seconds
+elapsed time: 0.008304119110107422 seconds
+elapsed time: 0.011655092239379883 seconds
+-------------------
+#1 Standard Julia For Loop:
+Elapsed time: 0.7988450527191162
+#2 Standard Julia Vector:
+Elapsed time: 2.436063051223755
+#3 Delayed Expression (Julia):
+Elapsed time: 1.123845100402832
+#4 Delayed Expression (CUDA):
+elapsed time: 0.009158134460449219 seconds
+Elapsed time: 0.1581878662109375 Readback time: 0.009194135665893555
+
+Estimated overhead per expression == 0.03250000476837158
+
+error(sum((#1 - DeJulia).^2) / abs(sum(#1)) == 1.308189128069204e-15
+error(sum((#1 - DeCuda).^2) / abs(sum(#1)) == 1.0159340834575552
+
+
+julia> 
+
+

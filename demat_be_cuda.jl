@@ -98,37 +98,41 @@ end
 type DeArrCuda{T,N} <: DeArr{DeBackEndCuda,T,N}
   
   function DeArrCuda()
-    me = new(jlCUBuffer());
+    me = new(0,jlCUBuffer());
     me
   end
   
   function DeArrCuda(a::Array{T,N})
-    me = new(jlCUBuffer());
+    me = new(0,jlCUBuffer());
     resize(me,numel(a));
     me[] = a;
     me
   end
 
   function DeArrCuda(n::Number)
-    me = new(jlCUBuffer());
+    me = new(0,jlCUBuffer());
     resize(me,n);
     me
   end
  
+  sz::CUsize_t
   buffer::jlCUBuffer
 end
 
 function numel{T}(arr::DeArrCuda{T,1})
-  return arr.buffer.sz / sizeof(T);
+  return arr.sz;
 end
 
 function clear(arr::DeArrCuda)
   clear(arr.buffer);
+  arr.sz = 0;
   return arr;
 end
 
 function resize{T}(arr::DeArrCuda{T,1},nsz)
-  resize(arr.buffer,sizeof(T) * nsz);
+  ncnt = sizeof(T) * nsz;
+  resize(arr.buffer,ncnt);
+  arr.sz = nsz;
   return arr;
 end
 
@@ -145,7 +149,44 @@ end
 typealias DeVecCu{T} DeArrCuda{T,1}
 typealias DeMatCu{T} DeArrCuda{T,2}
 
+# DeCudaEnviroment used to count/allocate registers for PTX generation
+type DePtxEnv
+  function DePtxEnv()
+    me = new(0,0,0,0);
+    return me;
+  end  
 
+  f32Cnt::Int
+  pf32Cnt::Int
+  f64Cnt::Int
+  pf64Cnt::Int
+end
+
+function genRegisterF32!(env::DePtxEnv)
+  regStr = "%f$(env.f32Cnt)";
+  env.f32Cnt +=1;
+  return regStr;
+end
+
+function genRegisterPtrF32!(env::DePtxEnv)
+  regStr = "%pf$(env.f32Cnt)";
+  env.pf32Cnt +=1;
+  return regStr;
+end
+
+function genRegisterF64!(env::DePtxEnv)
+  regStr = "%d$(env.f64Cnt)";
+  env.f64Cnt +=1;
+  return regStr;
+end
+
+function genRegisterPtrF64!(env::DePtxEnv)
+  regStr = "%pd$(env.pf64Cnt)";
+  env.pf64Cnt +=1;
+  return regStr;
+end
+
+# assignement
 function assign(lhs::DeVecCu,rhs::DeExpr)
     return lhs
 end
