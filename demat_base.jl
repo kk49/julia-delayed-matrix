@@ -63,6 +63,7 @@ type DeOpAdd end
 type DeOpSub end
 type DeOpMulEle end
 type DeOpDivEle end
+type DeOpLShift end
 
 const deBinOpList = (:+,:-,:.*,:./);
 
