@@ -215,15 +215,35 @@ end
 
 type PtxOpBin{op,dataType} <: PtxOp
   dst::PtxRegister{dataType};
-  op0::Union(Int64,Uint64,Float32,Float64,PtxRegister{dataType});
-  op1::Union(Int64,Uint64,Float32,Float64,PtxRegister{dataType});
+  op0::Union(Int64,Uint64,Float32,Float64,PtxRegister);
+  op1::Union(Int64,Uint64,Float32,Float64,PtxRegister);
 end
 
 # (registerType,register,param setup function, IR Ops)
 
-function de_cude_eval(a::DeConst,env,indexReg)
+function de_cuda_eltype(a::DeConst)
+  ptype = typeof(a.p1);
+  return ptype;
+end
+
+function de_cuda_eltype(a::DeReadOp)
+  return eltype(a.p1);
+end
+
+function de_cuda_eltype(a::DeBinOp)
+  p1type = de_cuda_eltype(a.p1);
+  p2type = de_cuda_eltype(a.p2);
+
+  if p1type == p2type
+     return p1type
+  else
+     error("Conversion between $p1type and $p2type not yet supported")
+  end
+end
+
+function de_cuda_eval(a::DeConst,env,indexReg)
     # allocate destination register
-    rType = typeof(a.p1);
+    rType = de_cuda_eltype(a);
     r = registerAlloc!(rType,env);
 
     # allocate space in param structure
@@ -231,16 +251,15 @@ function de_cude_eval(a::DeConst,env,indexReg)
 
     paramSetupFunc = @eval function(param,v::DeConst) param[$paramIndex] = [v.p1] end
 
-    ops = 
-    [ PtxOpLoad{msParam,rType}(r,paramName)
-    ];
+    ops = Array(PtxOp,0);
+    push(ops,PtxOpLoad{msParam,rType}(r,paramName));
 
     return ( rType , r , paramSetupFunc , ops );
 end
 
 function de_cuda_eval(a::DeReadOp,env,indexReg)
     # allocate ptr and destination register
-    rType = eltype(a.p1);
+    rType = de_cuda_eltype(a);
     r = registerAlloc!(rType,env);
     srcType = Ptr{rType};
     src = registerAlloc!(srcType,env);
@@ -252,31 +271,30 @@ function de_cuda_eval(a::DeReadOp,env,indexReg)
     
     paramSetupFunc = @eval function(param,v::DeReadOp) param[$paramIndex] = [v.p1.buffer.ptr] end
 
-    ops =
-    [ PtxOpLoad{msParam,srcType}(src,paramName)
-      PtxOpBin{DeOpLShift,srcType}(offset,indexReg,convert(Uint64,log2(sizeof(rType))))
-      PtxOpBin{DeOpAdd,srcType}(srcOffset,src,offset)
-      PtxOpLoad{msGlobal,rType}(r,srcOffset)
-    ];
+    ops = Array(PtxOp,0);
+    push(ops, PtxOpLoad{msParam,srcType}(src,paramName));
+    push(ops, PtxOpBin{DeOpLShift,srcType}(offset,indexReg,convert(Uint64,log2(sizeof(rType)))));
+    push(ops, PtxOpBin{DeOpAdd,srcType}(srcOffset,src,offset));
+    push(ops, PtxOpLoad{msGlobal,rType}(r,srcOffset));
+    
 
     return ( rType , r , paramSetupFunc , ops );
 end
 
-function de_cuda_eval{OT}(v::DeBinOp{OT},env,indexReg)
+function de_cuda_eval{OT}(a::DeBinOp{OT},env,indexReg)
   
-   p1 = de_cuda_eval(v.p1,env,indexReg)
-   p2 = de_cuda_eval(v.p2,env,indexReg)
-   
-   rType = promote_type(p1[1],p2[1]);
+   p1 = de_cuda_eval(a.p1,env,indexReg)
+   p2 = de_cuda_eval(a.p2,env,indexReg)
+ 
+   rType = de_cuda_eltype(a);
    r = registerAlloc!(rType,env);
 
-   paramSetupFunc = @eval function(param,v::DeBinOp{OT}) $(p1[3])(param,v.p1); $(p2[3])(param,v.p2); end
+   f1 = p1[3];
+   f2 = p2[3];
+   paramSetupFunc = @eval function(param,v::DeBinOp{OT}) f1(param,v.p1); f2(param,v.p2); end
 
-   ops =
-   [ p1[4]
-     p2[4]
-     PtxOpBin{OT,rType}(r,p1[2],p2[2])
-   ];
+   ops = [ p1[4], p2[4] ];
+   push(ops, PtxOpBin{OT,rType}(r,p1[2],p2[2]))
   
    return ( rType , r , paramSetupFunc , ops );
 end
