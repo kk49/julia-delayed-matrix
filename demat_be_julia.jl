@@ -95,4 +95,35 @@ end
 assign(lhs::DeArrJulia,rhs::DeEle) = assign(lhs,de_promote(rhs)...)
 assign(lhs::DeArrJulia,rhs::Number) = assign(lhs,de_promote(rhs)...)
 
+## TODO quick hack for sum, should be generalized for reduce
+function sum(rhs::DeExpr)
+  buildTime = @elapsed begin
+    @gensym i prhs
+    (rhsResult,rhsResultType,rhsPreamble,rhsKernel) = de_jl_eval(rhs,prhs,i)
+    rhsType = typeof(rhs);
+
+    @eval function sum1(($prhs)::($rhsType))
+        rhsSz = de_check_dims($prhs)
+
+        N = rhsSz[1]
+        sumV = convert($rhsResultType,0)
+        $rhsPreamble
+        for ($i) = 1:N
+            $rhsKernel
+            sumV += ($rhsResult)
+        end
+
+        return sumV
+    end
+
+    global sum
+    @eval sum(rhs::($rhsType)) = sum1(rhs)
+  end
+
+  println("DeMatJulia: Built New Sum (took $buildTime seconds) ... $rhsType");
+
+  return sum1(rhs)
+end
+
+sum(rhs::DeArrJulia) = sum(de_promote(rhs)...)
 

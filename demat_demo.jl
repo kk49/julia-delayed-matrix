@@ -23,6 +23,7 @@ function demat_test()
     dc = DeVecCu{Float32}(d);
 
     tN = 10
+    println("ASSIGN TEST")
     println("running $tN iterations of $N sized for loops...")
     println("-------------------")
     println("#1 Standard Julia For Loop:")
@@ -87,6 +88,23 @@ function demat_test()
 
     println("error(sum((#1 - DeCuda).^2) / abs(sum(#1)) == ",errorDec)
     println()
+
+
+    println("SUM TEST")
+    r1 = 0.0;
+    et = @elapsed for i = 1:tN r1 = r1 + sum(d) end
+    println("Julia sum(x): Time $et Result $r1")
+    r1 = 0.0;
+    et = @elapsed for i = 1:tN r1 = r1 + sum(dd) end
+    println("Delay Expression (Julia) sum(x): Time $et Result $r1")
+    
+    r1 = 0.0;
+    et = @elapsed for i = 1:tN r1 = r1 + sum(d .* d) end
+    println("Julia sum(x .* x): Time $et Result $r1")
+    r1 = 0.0;
+    #et = @elapsed for i = 1:tN r1 = r1 + sum(dd - float32(1.0)) end
+    et = @elapsed for i = 1:tN r1 = r1 + sum(cd .* cd) end
+    println("Delay Expression (Julia) sum(x .* x): Time $et Result $r1")
 
     return (errorDej,errorDec)
 end
