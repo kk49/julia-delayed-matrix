@@ -128,6 +128,10 @@ function numel{T}(arr::DeArrCuda{T,1})
   return arr.sz;
 end
 
+function size{T}(arr::DeArrCuda{T,1})
+  return (arr.sz,);
+end 
+
 function clear(arr::DeArrCuda)
   clear(arr.buffer);
   arr.sz = 0;
@@ -241,7 +245,7 @@ function de_cuda_eltype(a::DeBinOp)
   end
 end
 
-function de_cuda_eval(a::DeConst,env,indexReg)
+function de_cuda_eval(a::DeConst,env,paramOut,paramIn,indexReg)
     # allocate destination register
     rType = de_cuda_eltype(a);
     r = registerAlloc!(rType,env);
@@ -249,15 +253,15 @@ function de_cuda_eval(a::DeConst,env,indexReg)
     # allocate space in param structure
     (paramName,paramIndex) = paramAlloc!(rType,env);
 
-    paramSetupFunc = @eval function(param,v::DeConst) param[$paramIndex] = [v.p1] end
+    paramSetup = quote ($paramOut)[$paramIndex+1] = [($paramIn).p1] end
 
     ops = Array(PtxOp,0);
     push(ops,PtxOpLoad{msParam,rType}(r,paramName));
 
-    return ( rType , r , paramSetupFunc , ops );
+    return ( rType , r , paramSetup , ops );
 end
 
-function de_cuda_eval(a::DeReadOp,env,indexReg)
+function de_cuda_eval(a::DeReadOp,env,paramOut,paramIn,indexReg)
     # allocate ptr and destination register
     rType = de_cuda_eltype(a);
     r = registerAlloc!(rType,env);
@@ -269,7 +273,7 @@ function de_cuda_eval(a::DeReadOp,env,indexReg)
     # allocate space in param structure
     (paramName,paramIndex) = paramAlloc!(srcType,env);
     
-    paramSetupFunc = @eval function(param,v::DeReadOp) param[$paramIndex] = [v.p1.buffer.ptr] end
+    paramSetup = quote ($paramOut)[$paramIndex+1] = [($paramIn).p1.buffer.ptr] end
 
     ops = Array(PtxOp,0);
     push(ops, PtxOpLoad{msParam,srcType}(src,paramName));
@@ -278,37 +282,113 @@ function de_cuda_eval(a::DeReadOp,env,indexReg)
     push(ops, PtxOpLoad{msGlobal,rType}(r,srcOffset));
     
 
-    return ( rType , r , paramSetupFunc , ops );
+    return ( rType , r , paramSetup , ops );
 end
 
-function de_cuda_eval{OT}(a::DeBinOp{OT},env,indexReg)
+function de_cuda_eval{OT}(a::DeBinOp{OT},env,paramOut,paramIn,indexReg)
   
-   p1 = de_cuda_eval(a.p1,env,indexReg)
-   p2 = de_cuda_eval(a.p2,env,indexReg)
+   p1 = de_cuda_eval(a.p1,env,paramOut,quote ($paramIn).p1 end, indexReg)
+   p2 = de_cuda_eval(a.p2,env,paramOut,quote ($paramIn).p2 end, indexReg)
  
    rType = de_cuda_eltype(a);
    r = registerAlloc!(rType,env);
 
    f1 = p1[3];
    f2 = p2[3];
-   paramSetupFunc = @eval function(param,v::DeBinOp{OT}) f1(param,v.p1); f2(param,v.p2); end
+   paramSetup = quote $(p1[3]); $(p2[3]); end
 
    ops = [ p1[4], p2[4] ];
    push(ops, PtxOpBin{OT,rType}(r,p1[2],p2[2]))
   
-   return ( rType , r , paramSetupFunc , ops );
+   return ( rType , r , paramSetup , ops );
 end
 
 # assignement
 function assign(lhs::DeVecCu,rhs::DeExpr)
   buildTime = @elapsed begin
+    ltype = eltype(lhs);
     env = DePtxEnv();
-    indexRegister = registerAlloc!(Uint32,env);
-    ret = de_cuda_eval(rhs,env,indexRegister);
-    println("return Type: ",ret[1]);
-    println("return Reg:  ",ret[2]);
-    println("param setup: ",ret[3]);
-    println("ops:         ",ret[4]);
+    (lengthName,lengthIndex) = paramAlloc!(Uint32,env)
+    (dstName,dstIndex) = paramAlloc!(Ptr{ltype},env)
+    indexRegister = registerAlloc!(Uint32,env)
+    @gensym paramOut paramIn
+    ret = de_cuda_eval(rhs,env,paramOut,paramIn,indexRegister);
+    rtype = ret[1]
+    rreg = ret[2]
+    paramSetup = ret[3]
+    ops = ret[4]
+
+    println("return Type: $rtype");
+    println("return Reg:  $rreg");
+    println("ops:");
+    for i = 1:numel(ops)
+      println(ops[i])
+    end
+    println("env: $env")
+
+    # setup parameter list
+    paramString = ""
+    for i = 1:numel(env.paramTypes)
+      pname = env.paramNames[i]
+      pt = env.paramTypes[i]
+      pts =""
+
+      et = pt
+      if pt <: Ptr       
+        if Ptr{Uint32} == et
+          pts = ".u32"
+        elseif Ptr{Uint64} == et
+          pts = ".u64"
+        elseif Ptr{Float32} == et
+          pts = ".f32"
+        elseif Ptr{Float64} == et
+          pts = ".f64"
+        else
+          error("Unhandled CUDA parameter type $pt")
+        end
+        pts = "$pts.ptr.global"
+      else
+        if Uint32 == et
+          pts = ".u32"
+        elseif Uint64 == et
+          pts = ".u64"
+        elseif Float32 == et
+          pts = ".f32"
+        elseif Float64 == et
+          pts = ".f64"
+        else
+          error("Unhandled CUDA parameter type $pt")
+        end
+      end
+  
+      if pt <: Ptr
+      end    
+  
+      paramString = "$paramString .param $pts $pname"
+      if i < numel(env.paramTypes)
+        paramString = "$paramString,\n"
+      end
+    end
+
+    # setup computation
+    compString = ""
+    
+    # setup result storage
+    resultString = ""
+
+    ccode = 
+".version 3.0
+.target sm_11
+.entry julia_func 
+(
+$paramString
+)
+{
+$compString
+
+$resultString
+} 
+"
 
     rhsType = typeof(rhs);
 
@@ -318,7 +398,6 @@ function assign(lhs::DeVecCu,rhs::DeExpr)
     errLogSize = 1024;
     errLog = Array(Uint8,errLogSize);
     errLog[1:end] = 0
-    ccode = ".version 3.0\n.target sm_30\n";
     
     println("Input PTX:")
     println("----------------------------")
@@ -340,6 +419,28 @@ function assign(lhs::DeVecCu,rhs::DeExpr)
       println("$(retM[3][i]) : $(retM[4][i])")
     end
     println("----------------------------")
+
+    @eval function assign1(plhs::DeVecCu,($paramIn)::($rhsType))
+      rhsSz = de_check_dims($paramIn)
+      lhsSz = size(plhs)
+      if rhsSz != lhsSz
+         error("src & dst size does not match. NOT IMPLEMENTED FOR SCALARS FIX")
+      end
+
+      N = numel(plhs)
+
+      $paramOut = Array(Any,$(numel(env.paramTypes)))
+      ($paramOut)[$lengthIndex+1] = [convert(Uint32,N)]
+      ($paramOut)[$dstIndex+1] = [plhs.buffer.ptr]
+      $paramSetup
+      params = $paramOut
+      println("params: $params");
+      for i = 1:numel(params)
+        println("$i: $(typeof(params[i])) $(params[i])")
+      end
+    end
+
+    assign1(lhs,rhs)
 
     #@eval function assign1(plhs::DeVecJ,($prhs)::($rhsType))
     #    rhsSz = de_check_dims($prhs)
