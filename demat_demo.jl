@@ -55,14 +55,14 @@ function demat_test()
 
 
     println("#3 Delayed Expression (Julia):")
-    et = @elapsed ad[] = bd+cd.*dd + float32(1.0) # give delayed expression a change to build the function
-    println("  Time to build (if necessary) and run one iteration: $et seconds")
-    et = @elapsed ad[] = bd+cd.*dd + float32(1.0) 
-    println("  Time to only run one iteration: $et seconds")
-    et = @elapsed ad[] = bd+cd.*dd + float32(2.0) 
-    println("  Time to only run one iteration (Add 2 instead of 1): $et seconds")
-    et = @elapsed ad[] = bd + float32(1.0) 
-    println("  Time to only run one iteration (replace second operand of top operator): $et seconds")
+#    et = @elapsed ad[] = bd+cd.*dd + float32(1.0) # give delayed expression a change to build the function
+#    println("  Time to build (if necessary) and run one iteration: $et seconds")
+#    et = @elapsed ad[] = bd+cd.*dd + float32(1.0) 
+#    println("  Time to only run one iteration: $et seconds")
+#    et = @elapsed ad[] = bd+cd.*dd + float32(2.0) 
+#    println("  Time to only run one iteration (Add 2 instead of 1): $et seconds")
+#    et = @elapsed ad[] = bd + float32(1.0) 
+#    println("  Time to only run one iteration (replace second operand of top operator): $et seconds")
 
     t3 = @elapsed for i = 1:tN ad[] = bd+cd.*dd + float32(1.0) end
     #@time ad[] = bd + 1.0 

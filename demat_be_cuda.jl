@@ -305,12 +305,41 @@ function assign(lhs::DeVecCu,rhs::DeExpr)
     env = DePtxEnv();
     indexRegister = registerAlloc!(Uint32,env);
     ret = de_cuda_eval(rhs,env,indexRegister);
-    println(ret[1]);
-    println(ret[2]);
-    println(ret[3]);
-    println(ret[4]);
+    println("return Type: ",ret[1]);
+    println("return Reg:  ",ret[2]);
+    println("param setup: ",ret[3]);
+    println("ops:         ",ret[4]);
 
     rhsType = typeof(rhs);
+
+    infoLogSize = 1024;
+    infoLog = Array(Uint8,infoLogSize);
+    infoLog[1:end] = 0
+    errLogSize = 1024;
+    errLog = Array(Uint8,errLogSize);
+    errLog[1:end] = 0
+    ccode = ".version 3.0\n.target sm_30\n";
+    
+    println("Input PTX:")
+    println("----------------------------")
+    println(ccode)  
+    println("----------------------------")
+    retM = cuModuleLoadDataEx(
+      ccode,
+      CU_JIT_WALL_TIME,
+      CU_JIT_TARGET_FROM_CUCONTEXT,
+      CU_JIT_INFO_LOG_BUFFER_SIZE,infoLogSize,
+      CU_JIT_INFO_LOG_BUFFER,infoLog,
+      CU_JIT_ERROR_LOG_BUFFER_SIZE,errLogSize,
+      CU_JIT_ERROR_LOG_BUFFER,errLog)
+    println("Output:") 
+    println("----------------------------")
+    println("errno: $(retM[1])")
+    println("hmod: $(retM[2])")
+    for i = 1:numel(retM[3])
+      println("$(retM[3][i]) : $(retM[4][i])")
+    end
+    println("----------------------------")
 
     #@eval function assign1(plhs::DeVecJ,($prhs)::($rhsType))
     #    rhsSz = de_check_dims($prhs)
