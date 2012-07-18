@@ -82,7 +82,7 @@ end
 
 function copyto{T}(dst::Array{T,1},src::jlCUBuffer)
     @assert numel(dst)*sizeof(T) == numel(src);
-    @time cuMemcpyDtoH(dst,src.ptr,src.sz);
+    cuMemcpyDtoH(dst,src.ptr,src.sz);
     return dst;
 end
 
@@ -160,6 +160,11 @@ typealias DeMatCu{T} DeArrCuda{T,2}
 
 # DeCudaEnviroment used to count/allocate registers for PTX generation
 const registerTypeToPrefix = {Float32=>"%f32_",Ptr{Float32}=>"%pf32_",Float64=>"%f64_",Ptr{Float64}=>"%pf64_",Uint32=>"%u32_",Ptr{Uint32}=>"%pu32_",Int32=>"%s32_",Ptr{Int32}=>"%ps32_"};
+
+const cudaPtr = "u32"
+const juliaTypeToCudaType = {Float32=>"f32",Ptr{Float32}=>cudaPtr,Float64=>"f64",Ptr{Float64}=>cudaPtr,Uint32=>"u32",Ptr{Uint32}=>cudaPtr,Int32=>"s32",Ptr{Int32}=>cudaPtr}
+const cudaBPtr = "b32"
+const juliaTypeToCudaBType = {Float32=>"b32",Ptr{Float32}=>cudaBPtr,Float64=>"b64",Ptr{Float64}=>cudaBPtr,Uint32=>"b32",Ptr{Uint32}=>cudaBPtr,Int32=>"b32",Ptr{Int32}=>cudaBPtr}
 
 type DePtxEnv
   function DePtxEnv()
@@ -245,6 +250,18 @@ function de_cuda_eltype(a::DeBinOp)
   end
 end
 
+function de_eltype{T,N}(a::Type{Array{T,N}})
+  return T
+end
+
+function de_eltype{T}(a::Type{Ptr{T}})
+  return T
+end
+
+function de_eltype(a::Type)
+  return a
+end
+
 function de_cuda_eval(a::DeConst,env,paramOut,paramIn,indexReg)
     # allocate destination register
     rType = de_cuda_eltype(a);
@@ -303,28 +320,58 @@ function de_cuda_eval{OT}(a::DeBinOp{OT},env,paramOut,paramIn,indexReg)
    return ( rType , r , paramSetup , ops );
 end
 
+const DeOpToCudaOp = {DeOpAdd=>"add",DeOpLShift=>"shl",DeOpMulEle=>"mul"}
+const CudaMemSpaceToString = {msGlobal=>"global",msParam=>"param"}
+
+
+function de_cuda_operand(op::PtxRegister)
+  return op.id;
+end
+
+function de_cuda_operand(op) 
+  return "$op"
+end
+
+function de_cuda_op_to_string{OP,ST}(op::PtxOpBin{OP,ST})
+  if OP == DeOpLShift
+    opString = "$(DeOpToCudaOp[OP]).$(juliaTypeToCudaBType[ST])"
+  else
+    opString = "$(DeOpToCudaOp[OP]).$(juliaTypeToCudaType[ST])"
+  end
+  dst = op.dst.id
+  op0 = de_cuda_operand(op.op0)
+  op1 = de_cuda_operand(op.op1)
+
+  return "$opString $dst,$op0,$op1"
+end
+
+function de_cuda_op_to_string{MS,ST}(op::PtxOpLoad{MS,ST})
+  opString = "ld.$(CudaMemSpaceToString[MS]).$(juliaTypeToCudaType[ST])" 
+  dst = op.dst.id
+  addr = de_cuda_operand(op.addr)
+  return "$opString $dst,[$addr]"
+end
+
 # assignement
 function assign(lhs::DeVecCu,rhs::DeExpr)
   buildTime = @elapsed begin
     ltype = eltype(lhs);
     env = DePtxEnv();
     (lengthName,lengthIndex) = paramAlloc!(Uint32,env)
-    (dstName,dstIndex) = paramAlloc!(Ptr{ltype},env)
-    indexRegister = registerAlloc!(Uint32,env)
+    (dstPtrName,dstPtrIndex) = paramAlloc!(Ptr{ltype},env)
+    lengthReg = registerAlloc!(Uint32,env)
+    indexReg = registerAlloc!(Uint32,env)
+    dstPtrReg = registerAlloc!(Ptr{ltype},env)
     @gensym paramOut paramIn
-    ret = de_cuda_eval(rhs,env,paramOut,paramIn,indexRegister);
+    ret = de_cuda_eval(rhs,env,paramOut,paramIn,indexReg);
     rtype = ret[1]
     rreg = ret[2]
     paramSetup = ret[3]
     ops = ret[4]
 
-    println("return Type: $rtype");
-    println("return Reg:  $rreg");
-    println("ops:");
-    for i = 1:numel(ops)
-      println(ops[i])
-    end
-    println("env: $env")
+#    println("return Type: $rtype");
+#    println("return Reg:  $rreg");
+#    println("env: $env")
 
     # setup parameter list
     paramString = ""
@@ -333,36 +380,13 @@ function assign(lhs::DeVecCu,rhs::DeExpr)
       pt = env.paramTypes[i]
       pts =""
 
-      et = pt
+      et = de_eltype(pt)
+      pts = ".$(juliaTypeToCudaType[et])"
+
+      #TODO assume memory allocated by cuMalloc and is 16byte aligned
       if pt <: Ptr       
-        if Ptr{Uint32} == et
-          pts = ".u32"
-        elseif Ptr{Uint64} == et
-          pts = ".u64"
-        elseif Ptr{Float32} == et
-          pts = ".f32"
-        elseif Ptr{Float64} == et
-          pts = ".f64"
-        else
-          error("Unhandled CUDA parameter type $pt")
-        end
-        pts = "$pts.ptr.global"
-      else
-        if Uint32 == et
-          pts = ".u32"
-        elseif Uint64 == et
-          pts = ".u64"
-        elseif Float32 == et
-          pts = ".f32"
-        elseif Float64 == et
-          pts = ".f64"
-        else
-          error("Unhandled CUDA parameter type $pt")
-        end
+        pts = "$pts.ptr.global.align 16 "
       end
-  
-      if pt <: Ptr
-      end    
   
       paramString = "$paramString .param $pts $pname"
       if i < numel(env.paramTypes)
@@ -370,11 +394,33 @@ function assign(lhs::DeVecCu,rhs::DeExpr)
       end
     end
 
+    # register allocation
+    regString = ""
+    regKeys = keys(env.registerCounter)
+    for ri = 1:numel(regKeys)
+      rt = regKeys[ri]
+      rct = juliaTypeToCudaType[rt]
+      rc = env.registerCounter[rt]
+      rp = registerTypeToPrefix[rt]
+      regString = "$regString    .reg .$rct $(rp)<$rc>;\n"
+    end
+
     # setup computation
     compString = ""
+#    println("ops:");
+    for i = 1:numel(ops)
+      opstring = de_cuda_op_to_string(ops[i])
+#      println("$(ops[i]) --> $opstring")
+      compString = "$compString    $opstring;\n"
+    end
     
     # setup result storage
     resultString = ""
+    
+    stcache = ""
+    if false #sm >= sm_20
+      stcache = ".cs"
+    end
 
     ccode = 
 ".version 3.0
@@ -384,89 +430,153 @@ function assign(lhs::DeVecCu,rhs::DeExpr)
 $paramString
 )
 {
-$compString
+// Register Allocation
+$regString
+    .reg .u32 %ii,%ix,%nx,%cix,%cnx; //registers for index determination
+    .reg .pred p;
+    
+    ld.param.u32 $(lengthReg.id),[$(lengthName)]; //load length
+    ld.param.u32 $(dstPtrReg.id),[$(dstPtrName)]; //load destination ptr
 
+    // Index Setup
+    //TODO OVERKILL, but it should work for all cases
+    mov.u32 %ix,%tid.x;
+    mov.u32 %nx,%ntid.x;
+    mov.u32 %cix,%ctaid.x;
+    mov.u32 %cnx,%nctaid.x;
+
+    mad.lo.u32 $(indexReg.id),%cix,%nx,%ix;
+
+
+    setp.lt.u32 p,$(indexReg.id),$(lengthReg.id);
+@!p bra END; 
+    // Computation
+$compString
+    // Store results
+    shl.b32 %ii,$(indexReg.id),2;
+    add.u32 $(dstPtrReg.id),$(dstPtrReg.id),%ii;
+    st.global$stcache.$(juliaTypeToCudaType[ltype]) [$(dstPtrReg.id)],$(rreg.id);
 $resultString
+    // Jump destination for threads that are beyond data length
+END:
 } 
 "
 
     rhsType = typeof(rhs);
 
-    infoLogSize = 1024;
+    infoLogSize = 4096;
     infoLog = Array(Uint8,infoLogSize);
     infoLog[1:end] = 0
-    errLogSize = 1024;
+    errLogSize = 4096;
     errLog = Array(Uint8,errLogSize);
     errLog[1:end] = 0
     
-    println("Input PTX:")
-    println("----------------------------")
-    println(ccode)  
-    println("----------------------------")
     retM = cuModuleLoadDataEx(
       ccode,
       CU_JIT_WALL_TIME,
       CU_JIT_TARGET_FROM_CUCONTEXT,
+      CU_JIT_THREADS_PER_BLOCK,1024,
       CU_JIT_INFO_LOG_BUFFER_SIZE,infoLogSize,
       CU_JIT_INFO_LOG_BUFFER,infoLog,
       CU_JIT_ERROR_LOG_BUFFER_SIZE,errLogSize,
       CU_JIT_ERROR_LOG_BUFFER,errLog)
-    println("Output:") 
-    println("----------------------------")
-    println("errno: $(retM[1])")
-    println("hmod: $(retM[2])")
+
+    res = retM[1]
+    hmod = retM[2]
+    threadsPerBlock = 0 
+
+    showInfoLog = false
+    showErrorLog = false
     for i = 1:numel(retM[3])
-      println("$(retM[3][i]) : $(retM[4][i])")
-    end
-    println("----------------------------")
-
-    @eval function assign1(plhs::DeVecCu,($paramIn)::($rhsType))
-      rhsSz = de_check_dims($paramIn)
-      lhsSz = size(plhs)
-      if rhsSz != lhsSz
-         error("src & dst size does not match. NOT IMPLEMENTED FOR SCALARS FIX")
-      end
-
-      N = numel(plhs)
-
-      $paramOut = Array(Any,$(numel(env.paramTypes)))
-      ($paramOut)[$lengthIndex+1] = [convert(Uint32,N)]
-      ($paramOut)[$dstIndex+1] = [plhs.buffer.ptr]
-      $paramSetup
-      params = $paramOut
-      println("params: $params");
-      for i = 1:numel(params)
-        println("$i: $(typeof(params[i])) $(params[i])")
+      if CU_JIT_THREADS_PER_BLOCK == retM[3][i]
+        threadsPerBlock = retM[4][i]
+      elseif CU_JIT_WALL_TIME == retM[3][i]
+        println("CUDA Build Time: $(retM[4][i]/1000) Seconds") 
+      elseif CU_JIT_INFO_LOG_BUFFER_SIZE == retM[3][i]
+        showInfoLog = retM[4][i] > 0
+      elseif CU_JIT_INFO_LOG_BUFFER == retM[3][i]
+        if showInfoLog
+          println("CUDA BUILD INFO LOG: $(retM[4][i])")
+        end
+      elseif CU_JIT_ERROR_LOG_BUFFER_SIZE == retM[3][i]
+        showErrorLog = retM[4][i] > 0
+      elseif CU_JIT_ERROR_LOG_BUFFER == retM[3][i]
+        if showErrorLog
+          println("CUDA BUILD ERROR LOG: $(retM[4][i])")
+        end
       end
     end
 
-    assign1(lhs,rhs)
+    displayResults = false
+    if 0 != hmod
+      funcHnd = cuModuleGetFunction(hmod,"julia_func")
 
-    #@eval function assign1(plhs::DeVecJ,($prhs)::($rhsType))
-    #    rhsSz = de_check_dims($prhs)
-    #    lhsSz = size(plhs)
-    #    if rhsSz != lhsSz
-    #       error("src & dst size does not match. NOT IMPLEMENTED FOR SCALARS FIX")
-    #    end
+      @eval function assign1(plhs::DeVecCu,($paramIn)::($rhsType))
+        rhsSz = de_check_dims($paramIn)
+        lhsSz = size(plhs)
+        if rhsSz != lhsSz
+          error("src & dst size does not match. NOT IMPLEMENTED FOR SCALARS FIX")
+        end
 
-    #    N = size(plhs,1)
-    #    lhsData = plhs.data
-    #    $rhsPreamble
-    #    for ($i) = 1:N
-    #        $rhsKernel
-    #        lhsData[($i)] = ($rhsResult)
-    #    end
+        N = numel(plhs)
 
-    #    return plhs
-    #end
+        $paramOut = Array(Any,$(numel(env.paramTypes)))
+        ($paramOut)[$lengthIndex+1] = [uint32(N)]
+        ($paramOut)[$dstPtrIndex+1] = [plhs.buffer.ptr]
+        $paramSetup
+        params = $paramOut
+        paramPtrs = Array(Ptr{Void},$(numel(env.paramTypes)))
+        for i = 1:$(numel(env.paramTypes))
+          paramPtrs[i] = convert(Ptr{Void},params[i])
+        end
+#        println("params: $params");
+#        for i = 1:numel(params)
+#          println("$i: $(typeof(params[i])) $(params[i])")
+#        end
 
-    #global assign
-    #@eval assign(lhs::DeVecJ,rhs::($rhsType)) = assign1(lhs,rhs)
+        nxBlock = uint32((N + $threadsPerBlock - 1) / $threadsPerBlock)
+        nxThread = uint32($threadsPerBlock)
+#        println("nxb: $nxBlock, nxt: $nxThread")
+        cuLaunchKernel(
+          $funcHnd,
+          nxBlock, uint32(1), uint32(1), # gridDim
+          nxThread, uint32(1), uint32(1), #blockDim
+          uint32(0), #sharedMemBytes::Uint32, 
+          convert(Ptr{Void},0), #hStream::CUstream,
+          paramPtrs, 
+          convert(Ptr{Void},0)) #extra
+
+        cuStreamSynchronize(convert(Ptr{Void},0)) # wait for stream to finish, normally you would not do this but for timing tests it is needed
+
+        plhs
+      end
+
+      global assign
+      @eval assign(lhs::DeVecCu,rhs::($rhsType)) = assign1(lhs,rhs)
+    else
+      displayResults = true;
+    end
+
+    if displayResults
+      println("PTX Code:")
+      println("----------------------------")
+      println(ccode)
+      println("----------------------------")
+      println("Output:") 
+      println("----------------------------")
+      println("errno: $res")
+      println("hmod: $hmod")
+      for i = 1:numel(retM[3])
+        println("$(retM[3][i]) : $(retM[4][i])")
+      end
+      println("----------------------------")
+      error("Cuda Build Error: $res")
+    end
   end
-
+  
   println("DeMatJulia: Built New Assign (took $buildTime seconds) ... $rhsType");
-    
-  return lhs;
+
+  return assign1(lhs,rhs);
 end
 
 assign(lhs::DeArrCuda,rhs::DeEle) = assign(lhs,de_promote(rhs)...)

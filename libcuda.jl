@@ -48,6 +48,7 @@ typealias CUresult Int32
   const CUresult_array_is_mapped = 207
   const CUresult_already_mapped = 208
   const CUresult_no_binary_for_gpu = 209
+  const CUresult_invalid_handle = 400
   
 
 typealias CUjit_option Uint32;
@@ -105,6 +106,7 @@ const CUjit_option_julia_types =
 ## custom functions
 
 # give useful string for errors
+#TODO Make into dict
 function jlcuCheck(v)
   if CUresult_success == v
   elseif CUresult_invalid_value == v
@@ -129,6 +131,8 @@ function jlcuCheck(v)
     error("CUDA Call Error($v): Already Mapped")
   elseif CUresult_no_binary_for_gpu == v
     error("CUDA Call Error($v): No Binary For GPU")
+  elseif CUresult_invalid_handle == v
+    error("CUDA Call Error($v): Invalid Handle")
   else
     error("CUDA Call Error($v) #### NOT TRANSLATED ####")
   end
@@ -657,8 +661,13 @@ end
 # 	Destroys a stream.
 #CUresult 	cuStreamQuery (CUstream hStream)
 # 	Determine status of a compute stream.
+
 #CUresult 	cuStreamSynchronize (CUstream hStream)
 # 	Wait until a stream's tasks are completed.
+@eval function cuStreamSynchronize(hStream)
+  jlcuCheck(ccall(dlsym(libcuda,:cuStreamSynchronize),CUresult,(CUstream,),hStream))
+end
+
 #CUresult 	cuStreamWaitEvent (CUstream hStream, CUevent hEvent, unsigned int Flags)
 # 	Make a compute stream wait on an event. 
 #
@@ -690,7 +699,13 @@ function cuLaunchKernel(
   	sharedMemBytes::Uint32, hStream::CUstream,
   	kernelParams, extra)
   jlcuCheck(ccall(dlsym(libcuda,:cuLaunchKernel),CUresult,(CUfunction,Uint32,Uint32,Uint32,Uint32,Uint32,Uint32,Uint32,CUstream,Ptr{Ptr{Void}},Ptr{Ptr{Void}}),
-  	gridDimX,gridDimY,gridDimZ,bloackDimX,blockDimY,blockDimZ,sharedMemBytes,hStream,kernelParams,extra))
+        f,
+  	gridDimX,gridDimY,gridDimZ,
+        blockDimX,blockDimY,blockDimZ,
+        sharedMemBytes,
+        hStream,
+        kernelParams,
+        extra))
 end
   
 # 	Launches a CUDA function. 

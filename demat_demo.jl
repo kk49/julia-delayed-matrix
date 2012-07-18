@@ -72,16 +72,13 @@ function demat_test()
     t4 = @elapsed for i = 1:tN ac[] = bc+cc.*dc + float32(1.0) end
     #@time ad[] = bd + 1.0
     t4rb = @elapsed acReadback[] = ac; # readback data 
-    println("Elapsed time: ",t4," Readback time: ",t4rb)
+    println("Elapsed time: $t4 (Additional Time To Readback: $t4rb)")
 
 
     errorDej = 0
     errorDec = 0
     errorDej = sum((a-ad.data).^2) / sum(a)
     errorDec = sum((a-acReadback).^2) / sum(a)
-
-    println()
-    println("Estimated overhead per expression == $((t3-t1)/tN)")
 
     println()
     println("error(sum((#1 - DeJulia).^2) / abs(sum(#1)) == $errorDej")
