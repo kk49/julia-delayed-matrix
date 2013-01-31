@@ -1,6 +1,5 @@
 ## Delayed Expressions
 # Copyright 2012, Krzysztof Kamieniecki (krys@kamieniecki.com)
 
-load("demat_base.jl")
-load("demat_be_julia.jl")
-load("demat_be_cuda.jl")
+require("demat_be_julia.jl")
+require("demat_be_cuda.jl")

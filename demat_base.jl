@@ -41,29 +41,33 @@ de_promote(x::DeArr) = (DeReadOp(x),)
 de_promote(x::DeExpr) = (x,)
 de_promote(x,xs...) = tuple(de_promote(x)...,de_promote(xs...)...)
 
-typealias BinOpParams Union((DeEle,Number),(Number,DeEle),(DeEle,DeEle))
+de_check_dims(a::DeConst) = ()
+de_check_dims(a::DeReadOp) = size(a.p1)
+de_check_dims(a::DeUniOp) = de_check_dims(a.p1)
+function de_check_dims(a::DeBinOp)
+  r1 = de_check_dims(a.p1)
+  r2 = de_check_dims(a.p2)
 
-type DeOpAdd end
-type DeOpSub end
-type DeOpMulEle end
-type DeOpDivEle end
+  if length(r1) == 0
+    return r2
+  elseif length(r2) == 0
+    return r1
+  elseif r1 == r2
+    return r1
+  else
+    error("BinOp Parameters do not match")
+  end
+end
 
-const deBinOpList = (:+,:-,:.*,:./);
+de_make_bin_op(OP,A,B) = DeBinOp(OP,typeof(A),typeof(B))(A,B)
 
-de_op_to_type = dict((:+,),(DeOpAdd,))
-de_op_to_type[:-] = DeOpSub
-de_op_to_type[:.*] = DeOpMulEle
-de_op_to_type[:./] = DeOpDivEle
+deBinOpMap = [ :+ => :+, :- => :-, :.* => :*, :./ => :/, :.^ => :^]
 
-de_op_to_scaler = dict((:+,),(:+,))
-de_op_to_scaler[:-] = :-
-de_op_to_scaler[:.*] = :*
-de_op_to_scaler[:./] = :/
+importall Base
 
-for op = deBinOpList
-  opType = de_op_to_type[op];
-  @eval ($op)(a::DeEle,b::Number) = DeBinOp{$opType}(de_promote(a,b)...)
-  @eval ($op)(a::Number,b::DeEle) = DeBinOp{$opType}(de_promote(a,b)...)
-  @eval ($op)(a::DeEle,b::DeEle) =  DeBinOp{$opType}(de_promote(a,b)...)
+for op = keys(deBinOpMap)
+  @eval ($op)(a::DeEle,b::Number) = DeBinOp{$(expr(:quote, op)),typeof(de_promote(a,b))...}(de_promote(a,b)...)
+  @eval ($op)(a::Number,b::DeEle) = DeBinOp{$(expr(:quote, op)),typeof(de_promote(a,b))...}(de_promote(a,b)...)
+  @eval ($op)(a::DeEle,b::DeEle) =  DeBinOp{$(expr(:quote, op)),typeof(de_promote(a,b))...}(de_promote(a,b)...)
 end
 

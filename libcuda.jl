@@ -63,7 +63,7 @@ typealias CUjit_options Uint32;
     const CU_PREFER_PTX     = 0;
     const CU_PREFER_BINARY  = 1;
 
-const CUjit_option_c_types = dict(
+const CUjit_option_c_types = Dict(
   (CU_JIT_MAX_REGISTERS,CU_JIT_THREADS_PER_BLOCK,CU_JIT_WALL_TIME,CU_JIT_INFO_LOG_BUFFER,
    CU_JIT_INFO_LOG_BUFFER_SIZE,CU_JIT_ERROR_LOG_BUFFER,CU_JIT_ERROR_LOG_BUFFER_SIZE,CU_JIT_OPTIMIZATION_LEVEL,
    CU_JIT_TARGET_FROM_CUCONTEXT,CU_JIT_TARGET,CU_JIT_FALLBACK_STRATEGY),
@@ -71,7 +71,7 @@ const CUjit_option_c_types = dict(
    Uint32,Ptr{Uint8},Uint32,Uint32,
    (),Uint32,Uint32));
 
-const CUjit_option_julia_types = dict(
+const CUjit_option_julia_types = Dict(
   (CU_JIT_MAX_REGISTERS,CU_JIT_THREADS_PER_BLOCK,CU_JIT_WALL_TIME,CU_JIT_INFO_LOG_BUFFER,
    CU_JIT_INFO_LOG_BUFFER_SIZE,CU_JIT_ERROR_LOG_BUFFER,CU_JIT_ERROR_LOG_BUFFER_SIZE,CU_JIT_OPTIMIZATION_LEVEL,
    CU_JIT_TARGET_FROM_CUCONTEXT,CU_JIT_TARGET,CU_JIT_FALLBACK_STRATEGY),
@@ -167,7 +167,7 @@ end
 function cuDeviceGetName(hdev::CUdevice)
   deviceName = Array(Uint8, 128)
   jlcuCheck(ccall(dlsym(libcuda,:cuDeviceGetName),CUresult,(Ptr{Uint8},Int32,CUdevice),deviceName, length(deviceName),hdev))
-  return cstring(convert(Ptr{Uint8}, deviceName))
+  return bytestring(convert(Ptr{Uint8},deviceName))
 end
 
 function cuDeviceTotalMem(hdev::CUdevice)
@@ -271,7 +271,7 @@ end
 ### Module Management
 function cuModuleGetFunction(hmod::CUmodule,name::String)
   func = Array(CUfunction,1)
-  jlcuCheck(ccall(dlsym(libcuda,:cuModuleGetFunction),CUresult,(Ptr{CUfunction},CUmodule,Ptr{Uint8}),func,hmod,cstring(name)))
+  jlcuCheck(ccall(dlsym(libcuda,:cuModuleGetFunction),CUresult,(Ptr{CUfunction},CUmodule,Ptr{Uint8}),func,hmod,bytestring(name)))
   return func[1]
 end
 
@@ -279,33 +279,33 @@ if CUDA_API_VERSION >= 3020
   function cuModuleGetGlobal(hmod::CUmodule,name::String)
     dptr = Array(CUdeviceptr,1);
     bytes = Array(CUsize_t,1);
-    jlcuCheck(ccall(dlsym(libcuda,:cuModuleGetGlobal_v2),CUresult,(Ptr{CUdeviceptr},Ptr{CUsize_t},CUmodule,Ptr{Uint8}),dptr,bytes,hmod,cstring(name)))
+    jlcuCheck(ccall(dlsym(libcuda,:cuModuleGetGlobal_v2),CUresult,(Ptr{CUdeviceptr},Ptr{CUsize_t},CUmodule,Ptr{Uint8}),dptr,bytes,hmod,bytestring(name)))
     return (dptr[1],bytes[1])
   end
 else
   function cuModuleGetGlobal(hmod::CUmodule,name::String)
     dptr = Array(CUdeviceptr,1);
     bytes = Array(CUsize_t,1);
-    jlcuCheck(ccall(dlsym(libcuda,:cuModuleGetGlobal),CUresult,(Ptr{CUdeviceptr},Ptr{CUsize_t},CUmodule,Ptr{Uint8}),dptr,bytes,hmod,cstring(name)))
+    jlcuCheck(ccall(dlsym(libcuda,:cuModuleGetGlobal),CUresult,(Ptr{CUdeviceptr},Ptr{CUsize_t},CUmodule,Ptr{Uint8}),dptr,bytes,hmod,bytestring(name)))
     return (dptr[1],bytes[1])
   end
 end
 
 function cuModuleGetSurfRef(hmod::CUmodule,name::String)
   surfRef = Array(CUsurfref,1);
-  jlcuCheck(ccall(dlsym(libcuda,:cuModuleGetSurfRef),CUresult,(Ptr{CUsurfref},CUmodule,Ptr{Uint8}),surfRef,hmod,cstring(name)))
+  jlcuCheck(ccall(dlsym(libcuda,:cuModuleGetSurfRef),CUresult,(Ptr{CUsurfref},CUmodule,Ptr{Uint8}),surfRef,hmod,bytestring(name)))
   return surfRef[1]
 end
 
 function cuModuleGetTexRef(hmod::CUmodule,name::String)
   texRef = Array(CUtexref,1);
-  jlcuCheck(ccall(dlsym(libcuda,:cuModuleGetTexRef),CUresult,(Ptr{CUtexref},CUmodule,Ptr{Uint8}),texRef,hmod,cstring(name)))
+  jlcuCheck(ccall(dlsym(libcuda,:cuModuleGetTexRef),CUresult,(Ptr{CUtexref},CUmodule,Ptr{Uint8}),texRef,hmod,bytestring(name)))
   return texRef[1]
 end
 
 function cuModuleLoad(fname::String)
   hmod = Array(CUmodule,1);
-  jlcuCheck(ccall(dlsym(libcuda,:cuModuleLoad),CUresult,(Ptr{CUmodule},Ptr{Uint8}),hmod,cstring(name)))
+  jlcuCheck(ccall(dlsym(libcuda,:cuModuleLoad),CUresult,(Ptr{CUmodule},Ptr{Uint8}),hmod,bytestring(name)))
   return hmod[1]
 end
 
@@ -316,7 +316,7 @@ function cuModuleLoadData_base(image)
 end
 
 function cuModuleLoadData(image::String)
-  return cuModuleLoadData_base(cstring(image))
+  return cuModuleLoadData_base(bytestring(image))
 end
 
 function cuModuleLoadData(image::Array{Uint8})
@@ -363,7 +363,7 @@ function cuModuleLoadDataEx_base(image,options...)
 end
 
 function cuModuleLoadDataEx(image::String,options...)
-  return cuModuleLoadDataEx_base(cstring(image),options...)
+  return cuModuleLoadDataEx_base(bytestring(image),options...)
 end
 
 function cuModuleLoadData(image::Array{Uint8},options...)

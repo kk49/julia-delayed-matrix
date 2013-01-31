@@ -1,6 +1,8 @@
 ## Delayed Expressions Julia Backend
 # Copyright 2012, Krzysztof Kamieniecki (krys@kamieniecki.com)
 
+require("demat_base.jl")
+
 type DeBackEndJulia  
 end
 
@@ -16,36 +18,9 @@ size(a::DeArrJulia,dim) = size(a.data,dim)
 typealias DeVecJ{T} DeArrJulia{T,1}
 typealias DeMatJ{T} DeArrJulia{T,2}
 
-function de_jl_check_dims(a::DeConst)
-  ()
-end
-
-function de_jl_check_dims(a::DeReadOp)
-  size(a.p1)
-end
-
-function de_jl_check_dims(a::DeUniOp)
-  de_jl_check_dims(a.p1)
-end
-
-function de_jl_check_dims(a::DeBinOp)
-  r1 = de_jl_check_dims(a.p1)
-  r2 = de_jl_check_dims(a.p2)
-
-  if length(r1) == 0
-    return r2
-  elseif length(r2) == 0
-    return r1
-  elseif r1 == r2
-    return r1
-  else
-    error("BinOp Parameters do not match")
-  end
-end
-
 # de_jl_eval returns a 3-tuple that contains
-#   symbol that contains the value of the extression
-#   the quoted preable code
+#   symbol that contains the value of the expression
+#   the quoted preamble code
 #   the quoted kernal code
 
 function de_jl_eval(a::DeConst,idxSym)
@@ -64,36 +39,26 @@ function de_jl_eval(a::DeReadOp,idxSym)
     )
 end
 
-#function de_do_op(S,a,b) (S)(a,b) end
-#for op = deBinOpList
-#  opType = de_op_to_type(op)
-#  opSingle = de_op_to_scaler(op)
-#  opSingle = eval(opSingle)
-#  opS = $op;
-#  @eval function de_do_op(T::DeBinOp{$opType},a,b) ($opS)(a,b) end
-#end
-
 function de_jl_eval(v::DeBinOp,idxSym)
    @gensym r
    p1 = de_jl_eval(v.p1,idxSym)
    p2 = de_jl_eval(v.p2,idxSym)
-   preamble = quote $(p1[2]);$(p2[2]) end
-   kernel = quote $(p1[3]);$(p2[3]);($r) = de_jl_do_op($v,$(p1[1]),$(p2[1])) end
    ( r
-   , preamble
-   , kernel
+   , quote $(p1[2]);$(p2[2]) end
+   , quote $(p1[3]);$(p2[3]);($r) = de_jl_do_op($v,$(p1[1]),$(p2[1])) end
    )
 end
 
-for op = deBinOpList
-  opType = de_op_to_type[op];
-  opSingle = de_op_to_scaler[op];
-  @eval de_jl_do_op(v::DeBinOp{$opType},a,b) = ($opSingle)(a,b)
-  #@eval function de_jl_do_op(v::DeBinOp{$opType},a,b) = ($opSingle)(a,b) end # does not work?
+for op = keys(deBinOpMap)
+    opType = DeBinOp{op};
+    opSingle = deBinOpMap[op];
+    @eval de_jl_do_op(v::($opType),a,b) = ($opSingle)(a,b)
+    #@eval de_jl_do_op(v::DeBinOp{$op},a,b) = ($opSingle)(a,b)
+    #@eval function de_jl_do_op(v::DeBinOp{$opType},a,b) = ($opSingle)(a,b) end # does not work?
 end
 
 function assign(lhs::DeVecJ,rhs::DeExpr)
-    rhsSz = de_jl_check_dims(rhs)
+    rhsSz = de_check_dims(rhs)
     lhsSz = size(lhs)
 
     if rhsSz != lhsSz

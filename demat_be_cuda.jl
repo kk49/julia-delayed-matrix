@@ -6,8 +6,11 @@
 ## setup cuda library
 #TODO should auto detect if the library is missing and give up
 
-load("libcuda.jl")
+require("demat_base.jl")
 
+require("libcuda.jl")
+
+import Base.resize # we will add a new resize for our arrays
 
 ### CUDA objects, should go to different file
 
@@ -115,20 +118,24 @@ type DeArrCuda{T,N} <: DeArr{DeBackEndCuda,T,N}
     me
   end
  
+  sz::CUsize_t
   buffer::jlCUBuffer
 end
 
 function numel{T}(arr::DeArrCuda{T,1})
-  return arr.buffer.sz / sizeof(T);
+  return arr.sz;
 end
 
 function clear(arr::DeArrCuda)
   clear(arr.buffer);
+  arr.sz = 0;
   return arr;
 end
 
 function resize{T}(arr::DeArrCuda{T,1},nsz)
-  resize(arr.buffer,sizeof(T) * nsz);
+  ncnt = sizeof(T) * nsz;
+  resize(arr.buffer,ncnt);
+  arr.sz = nsz;
   return arr;
 end
 
@@ -144,6 +151,9 @@ end
 
 typealias DeVecCu{T} DeArrCuda{T,1}
 typealias DeMatCu{T} DeArrCuda{T,2}
+
+
+
 
 
 function assign(lhs::DeVecCu,rhs::DeExpr)

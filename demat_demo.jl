@@ -1,7 +1,7 @@
 ## Delayed Expressions Demo
 # Copyright 2012, Krzysztof Kamieniecki (krys@kamieniecki.com)
 
-load("demat.jl")
+require("demat.jl")
 
 ## test code
 
@@ -16,11 +16,11 @@ function demat_test()
     cd = DeVecJ{Float32}(c)
     dd = DeVecJ{Float32}(d)
     #the following should be included somehow in the time below...
-    acReadback = copy(a);
-    ac = DeVecCu{Float32}(a);
-    bc = DeVecCu{Float32}(b);
-    cc = DeVecCu{Float32}(c);
-    dc = DeVecCu{Float32}(d);
+#    acReadback = copy(a);
+#    ac = DeVecCu{Float32}(a);
+#    bc = DeVecCu{Float32}(b);
+#    cc = DeVecCu{Float32}(c);
+#    dc = DeVecCu{Float32}(d);
 
     tN = 10
     println("-------------------")
@@ -45,16 +45,16 @@ function demat_test()
     #@time ad[] = bd + 1.0 
     println("Elapsed time: ",t3)
 
-    println("#4 Delayed Expression (CUDA):")
-    t4 = @elapsed for i = 1:tN ac[] = bc+cc.*dc + 1.0 end
-    #@time ad[] = bd + 1.0
-    t4rb = @elapsed acReadback[] = ac; # readback data 
-    println("Elapsed time: ",t4," Readback time: ",t4rb)
+#    println("#4 Delayed Expression (CUDA):")
+#    t4 = @elapsed for i = 1:tN ac[] = bc+cc.*dc + 1.0 end
+#    #@time ad[] = bd + 1.0
+#    t4rb = @elapsed acReadback[] = ac; # readback data 
+#    println("Elapsed time: ",t4," Readback time: ",t4rb)
 
 
 
     errorDej = sum((a-ad.data).^2) / sum(a)
-    errorDec = sum((a-acReadback).^2) / sum(a)
+#    errorDec = sum((a-acReadback).^2) / sum(a)
 
     println()
     println("Estimated overhead per expression == ",(t3-t1)/tN)
@@ -62,10 +62,10 @@ function demat_test()
     println()
     println("error(sum((#1 - DeJulia).^2) / abs(sum(#1)) == ",errorDej)
 
-    println("error(sum((#1 - DeCuda).^2) / abs(sum(#1)) == ",errorDec)
-    println()
+#    println("error(sum((#1 - DeCuda).^2) / abs(sum(#1)) == ",errorDec)
+#    println()
 
-    error
+    ()
 end
 
 demat_test()
