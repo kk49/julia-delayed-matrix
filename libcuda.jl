@@ -8,6 +8,7 @@
 # http://www.dmi.unict.it/~bilotta/gpgpu/notes/10-driver.html
 
 libcuda = dlopen("libcuda")
+#libtestcuda = dlopen("libtestcuda")
 
 typealias CUdevice Int32
 typealias CUcontext Ptr{Void}
@@ -39,9 +40,18 @@ typealias CUresult Int32
   const CUresult_invalid_value = 1
   const CUresult_out_of_memory = 2
   const CUresult_not_initialized = 3
+  const CUresult_invalid_image = 200 
   const CUresult_invalid_context = 201
+  const CUresult_context_already_current = 202
+  const CUresult_map_failed = 205
+  const CUresult_unmap_failed = 206
+  const CUresult_array_is_mapped = 207
+  const CUresult_already_mapped = 208
+  const CUresult_no_binary_for_gpu = 209
+  const CUresult_invalid_handle = 400
+  
 
-typealias CUjit_options Uint32;
+typealias CUjit_option Uint32;
   const CU_JIT_MAX_REGISTERS = 0;         #Uint32   #(Input) Maximum number of registers each thread may use #(Output) NA
   const CU_JIT_THREADS_PER_BLOCK = 1;     #Uint32   #(Input) minimum number of threads per block             #(Output) Actual number compiler came up with
   const CU_JIT_WALL_TIME = 2;             #Float32  #(Input) NA                                              #(Output) time spent compiling
@@ -63,26 +73,40 @@ typealias CUjit_options Uint32;
     const CU_PREFER_PTX     = 0;
     const CU_PREFER_BINARY  = 1;
 
-const CUjit_option_c_types = Dict(
-  (CU_JIT_MAX_REGISTERS,CU_JIT_THREADS_PER_BLOCK,CU_JIT_WALL_TIME,CU_JIT_INFO_LOG_BUFFER,
-   CU_JIT_INFO_LOG_BUFFER_SIZE,CU_JIT_ERROR_LOG_BUFFER,CU_JIT_ERROR_LOG_BUFFER_SIZE,CU_JIT_OPTIMIZATION_LEVEL,
-   CU_JIT_TARGET_FROM_CUCONTEXT,CU_JIT_TARGET,CU_JIT_FALLBACK_STRATEGY),
-  (Uint32,Uint32,Float32,Ptr{Uint8},
-   Uint32,Ptr{Uint8},Uint32,Uint32,
-   (),Uint32,Uint32));
+# ID => (in type, out type)
+#TODO CUDA expects individual values to be passed (Ints,Floats) as pointers, for now this is explicitly encoded here, at some point this should be automatic...
+const CUjit_option_c_types = 
+{ CU_JIT_MAX_REGISTERS         => (Uint32,())
+  CU_JIT_THREADS_PER_BLOCK     => (Uint32,Uint32)
+  CU_JIT_WALL_TIME             => ((),Float32)
+  CU_JIT_INFO_LOG_BUFFER       => (Ptr{Uint8},Ptr{Uint8})
+  CU_JIT_INFO_LOG_BUFFER_SIZE  => (Uint32,Uint32)
+  CU_JIT_ERROR_LOG_BUFFER      => (Ptr{Uint8},Ptr{Uint8})
+  CU_JIT_ERROR_LOG_BUFFER_SIZE => (Uint32,Uint32)
+  CU_JIT_OPTIMIZATION_LEVEL    => (Uint32,())
+  CU_JIT_TARGET_FROM_CUCONTEXT => ((),())
+  CU_JIT_TARGET                => (Uint32,())
+  CU_JIT_FALLBACK_STRATEGY     => (Uint32,())
+}
 
-const CUjit_option_julia_types = Dict(
-  (CU_JIT_MAX_REGISTERS,CU_JIT_THREADS_PER_BLOCK,CU_JIT_WALL_TIME,CU_JIT_INFO_LOG_BUFFER,
-   CU_JIT_INFO_LOG_BUFFER_SIZE,CU_JIT_ERROR_LOG_BUFFER,CU_JIT_ERROR_LOG_BUFFER_SIZE,CU_JIT_OPTIMIZATION_LEVEL,
-   CU_JIT_TARGET_FROM_CUCONTEXT,CU_JIT_TARGET,CU_JIT_FALLBACK_STRATEGY),
-  (Uint32,Uint32,Float32,Array{Uint8},
-   Uint32,Array{Uint8},Uint32,Uint32,
-   (),Uint32,Uint32));
-
+const CUjit_option_julia_types = 
+{ CU_JIT_MAX_REGISTERS         => (Uint32,())
+  CU_JIT_THREADS_PER_BLOCK     => (Uint32,Uint32)
+  CU_JIT_WALL_TIME             => ((),Float32) 
+  CU_JIT_INFO_LOG_BUFFER       => (Array{Uint8,1},ASCIIString) 
+  CU_JIT_INFO_LOG_BUFFER_SIZE  => (Uint32,Uint32) 
+  CU_JIT_ERROR_LOG_BUFFER      => (Array{Uint8,1},ASCIIString)
+  CU_JIT_ERROR_LOG_BUFFER_SIZE => (Uint32,Uint32)
+  CU_JIT_OPTIMIZATION_LEVEL    => (Uint32,())
+  CU_JIT_TARGET_FROM_CUCONTEXT => ((),())
+  CU_JIT_TARGET                => (Uint32,())
+  CU_JIT_FALLBACK_STRATEGY     => (Uint32,())
+}
 
 ## custom functions
 
 # give useful string for errors
+#TODO Make into dict
 function jlcuCheck(v)
   if CUresult_success == v
   elseif CUresult_invalid_value == v
@@ -91,8 +115,24 @@ function jlcuCheck(v)
     error("CUDA Call Error($v): Out Of Memory")
   elseif CUresult_not_initialized == v
     error("CUDA Call Error($v): Not Initialized")
+  elseif CUresult_invalid_image == v
+    error("CUDA Call Error($v): Invalid Image")
   elseif CUresult_invalid_context == v
     error("CUDA Call Error($v): Invalid Context")
+  elseif CUresult_context_already_current == v
+    error("CUDA Call Error($v): Context Already Current")
+  elseif CUresult_map_failed == v
+    error("CUDA Call Error($v): Context Map Failed")
+  elseif CUresult_unmap_failed == v
+    error("CUDA Call Error($v): Context Unmap Failed")
+  elseif CUresult_array_is_mapped == v
+    error("CUDA Call Error($v): Array Is Mapped")
+  elseif CUresult_already_mapped == v
+    error("CUDA Call Error($v): Already Mapped")
+  elseif CUresult_no_binary_for_gpu == v
+    error("CUDA Call Error($v): No Binary For GPU")
+  elseif CUresult_invalid_handle == v
+    error("CUDA Call Error($v): Invalid Handle")
   else
     error("CUDA Call Error($v) #### NOT TRANSLATED ####")
   end
@@ -327,39 +367,73 @@ end
 # reference http://developer.download.nvidia.com/compute/cuda/4_2/rel/toolkit/docs/online/group__CUDA__MODULE_g9e8047e9dbf725f0cd7cafd18bfd4d12.html
 function cuModuleLoadDataEx_base(image,options...)
   hmod = Array(CUmodule,1);
+  hmod[1] = 0;
   # build options ids and values storage
   optionIds = Array(CUjit_option,0);
   optionValues = Array(Any,0);
-  optionValuePtrs = Array(Ptr{void},numOptions);
+  optionValuePtrs = Array(Ptr{Void},0);
 
   local idx = 1;
   while idx <= numel(options)
     option = options[idx];
-    if !has(CUjit_options_julia_types,options[idx])
+#    println("Param: $idx $option")
+    if !has(CUjit_option_julia_types,options[idx])
       error("Unknown Options: ",option);
     end
-    optionJuliaType = CUjit_options_julia_types[option];
-    optionCType = CUjit_options_c_types[option];
+
+    (optionJuliaTypeIn,optionJuliaTypeOut) = CUjit_option_julia_types[option];
+    (optionCTypeIn,optionCTypeOut) = CUjit_option_c_types[option];
+
     push(optionIds,option);
 
-    if optionJuliaType == ()
+    if optionJuliaTypeIn == ()
       push(optionValues,());
       push(optionValuePtrs,0);
     elseif idx >= numel(options)
       error("Missing Value after: ",option);
     else
-      ++idx
+      idx += 1;
       optionValue = options[idx];
-      optionValue = convert(optionJuliaType,optionValue);
+      optionValue = convert(optionJuliaTypeIn,optionValue);
       push(optionValues,optionValue);
-      push(optionValuePtrs,convert(optionCType,optionValue));
+      push(optionValuePtrs,convert(optionCTypeIn,optionValues[end]));
     end
-    ++idx;
+    idx += 1;
   end 
-  numOptions = size(options);
+  numOptions = numel(optionIds)
 
-  jlcuCheck(ccall(dlsym(libcuda,:cuModuleLoadDataEx),CUresult,(Ptr{CUmodule},Ptr{Uint8},Uint32,Ptr{CUjit_option},Ptr{Ptr{void}}),hmod,image,numOptions,optionIds,optionValuesPtrs))
-  return (hmod[1],optionIds,optionValues)
+#  println("image: $(typeof(image)) $image")
+#  println("numOptions: $numOptions")
+#  println("optionIds: $optionIds")
+#  println("optionValues: $optionValues")
+#  println("optionValuePtrs: $optionValuePtrs")
+#  for i = 1:numel(optionIds)
+#    println("$i : $(optionIds[i]) , $(optionValues[i]) , $(optionValuePtrs[i])")
+#  end
+
+  result = ccall(dlsym(libcuda,:cuModuleLoadDataEx),CUresult,(Ptr{CUmodule},Ptr{Uint8},Uint32,Ptr{CUjit_option},Ptr{Ptr{Void}}),hmod,image,numOptions,optionIds,optionValuePtrs)
+
+#  println("After Call: $(numel(optionIds))")
+  optionValuesOut = Array(Any,numel(optionIds))
+  for idx = 1:numel(optionIds)
+#    println("$idx : $(optionIds[idx]) , $(optionValuePtrs[idx])")
+    option = optionIds[idx];  
+    (optionJuliaTypeIn,optionJuliaTypeOut) = CUjit_option_julia_types[option];
+    (optionCTypeIn,optionCTypeOut) = CUjit_option_c_types[option];
+    
+    if optionJuliaTypeOut == ()
+      optionValuesOut[idx] = ()
+    elseif optionJuliaTypeOut == Float32
+      optionValuesOut[idx] = reinterpret(Float32,convert(Uint32,optionValuePtrs[idx]))
+    elseif optionJuliaTypeOut == ASCIIString
+      optionValuesOut[idx] = convert(ASCIIString,optionValues[idx])
+    else
+      optionValuesOut[idx] = convert(optionJuliaTypeOut,optionValuePtrs[idx])
+    end
+#    println("Value: $(optionValuesOut[idx])")
+  end
+
+  return (result,hmod[1],optionIds,optionValuesOut)
 end
 
 function cuModuleLoadDataEx(image::String,options...)
@@ -587,8 +661,13 @@ end
 # 	Destroys a stream.
 #CUresult 	cuStreamQuery (CUstream hStream)
 # 	Determine status of a compute stream.
+
 #CUresult 	cuStreamSynchronize (CUstream hStream)
 # 	Wait until a stream's tasks are completed.
+@eval function cuStreamSynchronize(hStream)
+  jlcuCheck(ccall(dlsym(libcuda,:cuStreamSynchronize),CUresult,(CUstream,),hStream))
+end
+
 #CUresult 	cuStreamWaitEvent (CUstream hStream, CUevent hEvent, unsigned int Flags)
 # 	Make a compute stream wait on an event. 
 #
@@ -620,7 +699,13 @@ function cuLaunchKernel(
   	sharedMemBytes::Uint32, hStream::CUstream,
   	kernelParams, extra)
   jlcuCheck(ccall(dlsym(libcuda,:cuLaunchKernel),CUresult,(CUfunction,Uint32,Uint32,Uint32,Uint32,Uint32,Uint32,Uint32,CUstream,Ptr{Ptr{Void}},Ptr{Ptr{Void}}),
-  	gridDimX,gridDimY,gridDimZ,bloackDimX,blockDimY,blockDimZ,sharedMemBytes,hStream,kernelParams,extra))
+        f,
+  	gridDimX,gridDimY,gridDimZ,
+        blockDimX,blockDimY,blockDimZ,
+        sharedMemBytes,
+        hStream,
+        kernelParams,
+        extra))
 end
   
 # 	Launches a CUDA function. 
