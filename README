@@ -6,9 +6,9 @@ For DEMO
 
     require("demat_demo.jl") 
 
-from julia command line. That will cause the expression to be compiled, cached, and run.
+from julia command line. That will cause the demo expressions to be compiled, cached, and run.
 
-It will run faster when the expressions are reused so run the tests again using
+The performance will be better when the expressions are reused so run the tests again using
 
     demat_test()
 
