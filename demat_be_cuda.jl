@@ -66,7 +66,7 @@ function clear(buffer::jlCUBuffer)
   return buffer;
 end
 
-function numel(buffer::jlCUBuffer)
+function length(buffer::jlCUBuffer)
   return buffer.sz;
 end
 
@@ -78,13 +78,13 @@ function resize(buffer::jlCUBuffer,nsz)
 end
 
 function copyto{T}(dst::jlCUBuffer,src::Array{T,1})
-    @assert numel(dst) == numel(src)*sizeof(T);
+    @assert length(dst) == length(src)*sizeof(T);
     cuMemcpyHtoD(dst.ptr,src,dst.sz);
     return dst;
 end
 
 function copyto{T}(dst::Array{T,1},src::jlCUBuffer)
-    @assert numel(dst)*sizeof(T) == numel(src);
+    @assert length(dst)*sizeof(T) == length(src);
     cuMemcpyDtoH(dst,src.ptr,src.sz);
     return dst;
 end
@@ -108,7 +108,7 @@ type DeArrCuda{T,N} <: DeArr{DeBackEndCuda,T,N}
   
   function DeArrCuda(a::Array{T,N})
     me = new(0,jlCUBuffer());
-    resize(me,numel(a));
+    resize(me,length(a));
     me[] = a;
     me
   end
@@ -127,7 +127,7 @@ function eltype{T,N}(arr::DeArrCuda{T,N})
   return T;
 end
 
-function numel{T}(arr::DeArrCuda{T,1})
+function length{T}(arr::DeArrCuda{T,1})
   return arr.sz;
 end
 
@@ -202,10 +202,10 @@ function registerType{dataType}(reg::PtxRegister{dataType})
 end
 
 function paramAlloc!(T,env::DePtxEnv)
-  paramIndex = numel(env.paramTypes);
+  paramIndex = length(env.paramTypes);
   paramName = "%p$(paramIndex)";
-  push(env.paramTypes,T);
-  push(env.paramNames,paramName);
+  push!(env.paramTypes,T);
+  push!(env.paramNames,paramName);
 
   return (paramName,paramIndex);
 end
@@ -249,7 +249,7 @@ function de_cuda_eltype(a::DeBinOp)
   if p1type == p2type
      return p1type
   else
-     error("Conversion between $p1type and $p2type not yet supported")
+     error("DeMat:CUDA: Conversion between $p1type and $p2type not yet supported")
   end
 end
 
@@ -276,7 +276,7 @@ function de_cuda_eval(a::DeConst,env,paramOut,paramIn,indexReg)
     paramSetup = quote ($paramOut)[$paramIndex+1] = [($paramIn).p1] end
 
     ops = Array(PtxOp,0);
-    push(ops,PtxOpLoad{msParam,rType}(r,paramName));
+    push!(ops,PtxOpLoad{msParam,rType}(r,paramName));
 
     return ( rType , r , paramSetup , ops );
 end
@@ -296,10 +296,10 @@ function de_cuda_eval(a::DeReadOp,env,paramOut,paramIn,indexReg)
     paramSetup = quote ($paramOut)[$paramIndex+1] = [($paramIn).p1.buffer.ptr] end
 
     ops = Array(PtxOp,0);
-    push(ops, PtxOpLoad{msParam,srcType}(src,paramName));
-    push(ops, PtxOpBin{:<<,srcType}(offset,indexReg,convert(Uint64,log2(sizeof(rType)))));
-    push(ops, PtxOpBin{:+,srcType}(srcOffset,src,offset));
-    push(ops, PtxOpLoad{msGlobal,rType}(r,srcOffset));
+    push!(ops, PtxOpLoad{msParam,srcType}(src,paramName));
+    push!(ops, PtxOpBin{:<<,srcType}(offset,indexReg,convert(Uint64,log2(sizeof(rType)))));
+    push!(ops, PtxOpBin{:+,srcType}(srcOffset,src,offset));
+    push!(ops, PtxOpLoad{msGlobal,rType}(r,srcOffset));
     
 
     return ( rType , r , paramSetup , ops );
@@ -318,7 +318,7 @@ function de_cuda_eval{OT}(a::DeBinOp{OT},env,paramOut,paramIn,indexReg)
    paramSetup = quote $(p1[3]); $(p2[3]); end
 
    ops = [ p1[4], p2[4] ];
-   push(ops, PtxOpBin{OT,rType}(r,p1[2],p2[2]))
+   push!(ops, PtxOpBin{OT,rType}(r,p1[2],p2[2]))
   
    return ( rType , r , paramSetup , ops );
 end
@@ -336,7 +336,7 @@ function de_cuda_operand(op)
 end
 
 function de_cuda_op_to_string{OP,ST}(op::PtxOpBin{OP,ST})
-  if OP == DeOpLShift
+  if OP == :<<
     opString = "$(DeOpToCudaOp[OP]).$(juliaTypeToCudaBType[ST])"
   else
     opString = "$(DeOpToCudaOp[OP]).$(juliaTypeToCudaType[ST])"
@@ -378,7 +378,7 @@ function assign(lhs::DeVecCu,rhs::DeExpr)
 
     # setup parameter list
     paramString = ""
-    for i = 1:numel(env.paramTypes)
+    for i = 1:length(env.paramTypes)
       pname = env.paramNames[i]
       pt = env.paramTypes[i]
       pts =""
@@ -392,7 +392,7 @@ function assign(lhs::DeVecCu,rhs::DeExpr)
       end
   
       paramString = "$paramString .param $pts $pname"
-      if i < numel(env.paramTypes)
+      if i < length(env.paramTypes)
         paramString = "$paramString,\n"
       end
     end
@@ -400,7 +400,7 @@ function assign(lhs::DeVecCu,rhs::DeExpr)
     # register allocation
     regString = ""
     regKeys = keys(env.registerCounter)
-    for ri = 1:numel(regKeys)
+    for ri = 1:length(regKeys)
       rt = regKeys[ri]
       rct = juliaTypeToCudaType[rt]
       rc = env.registerCounter[rt]
@@ -411,7 +411,7 @@ function assign(lhs::DeVecCu,rhs::DeExpr)
     # setup computation
     compString = ""
 #    println("ops:");
-    for i = 1:numel(ops)
+    for i = 1:length(ops)
       opstring = de_cuda_op_to_string(ops[i])
 #      println("$(ops[i]) --> $opstring")
       compString = "$compString    $opstring;\n"
@@ -490,7 +490,7 @@ END:
 
     showInfoLog = false
     showErrorLog = false
-    for i = 1:numel(retM[3])
+    for i = 1:length(retM[3])
       if CU_JIT_THREADS_PER_BLOCK == retM[3][i]
         threadsPerBlock = retM[4][i]
       elseif CU_JIT_WALL_TIME == retM[3][i]
@@ -518,22 +518,22 @@ END:
         rhsSz = de_check_dims($paramIn)
         lhsSz = size(plhs)
         if rhsSz != lhsSz
-          error("src & dst size does not match. NOT IMPLEMENTED FOR SCALARS FIX")
+          error("DeMat:CUDA: src & dst size does not match. NOT IMPLEMENTED FOR SCALARS FIX")
         end
 
-        N = numel(plhs)
+        N = length(plhs)
 
-        $paramOut = Array(Any,$(numel(env.paramTypes)))
+        $paramOut = Array(Any,$(length(env.paramTypes)))
         ($paramOut)[$lengthIndex+1] = [uint32(N)]
         ($paramOut)[$dstPtrIndex+1] = [plhs.buffer.ptr]
         $paramSetup
         params = $paramOut
-        paramPtrs = Array(Ptr{Void},$(numel(env.paramTypes)))
-        for i = 1:$(numel(env.paramTypes))
+        paramPtrs = Array(Ptr{Void},$(length(env.paramTypes)))
+        for i = 1:$(length(env.paramTypes))
           paramPtrs[i] = convert(Ptr{Void},params[i])
         end
 #        println("params: $params");
-#        for i = 1:numel(params)
+#        for i = 1:length(params)
 #          println("$i: $(typeof(params[i])) $(params[i])")
 #        end
 
@@ -569,11 +569,11 @@ END:
       println("----------------------------")
       println("errno: $res")
       println("hmod: $hmod")
-      for i = 1:numel(retM[3])
+      for i = 1:length(retM[3])
         println("$(retM[3][i]) : $(retM[4][i])")
       end
       println("----------------------------")
-      error("Cuda Build Error: $res")
+      error("DeMat:CUDA: Cuda Build Error: $res")
     end
   end
   

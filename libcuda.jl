@@ -374,7 +374,7 @@ function cuModuleLoadDataEx_base(image,options...)
   optionValuePtrs = Array(Ptr{Void},0);
 
   local idx = 1;
-  while idx <= numel(options)
+  while idx <= length(options)
     option = options[idx];
 #    println("Param: $idx $option")
     if !has(CUjit_option_julia_types,options[idx])
@@ -384,38 +384,38 @@ function cuModuleLoadDataEx_base(image,options...)
     (optionJuliaTypeIn,optionJuliaTypeOut) = CUjit_option_julia_types[option];
     (optionCTypeIn,optionCTypeOut) = CUjit_option_c_types[option];
 
-    push(optionIds,option);
+    push!(optionIds,option);
 
     if optionJuliaTypeIn == ()
-      push(optionValues,());
-      push(optionValuePtrs,0);
-    elseif idx >= numel(options)
+      push!(optionValues,());
+      push!(optionValuePtrs,0);
+    elseif idx >= length(options)
       error("Missing Value after: ",option);
     else
       idx += 1;
       optionValue = options[idx];
       optionValue = convert(optionJuliaTypeIn,optionValue);
-      push(optionValues,optionValue);
-      push(optionValuePtrs,convert(optionCTypeIn,optionValues[end]));
+      push!(optionValues,optionValue);
+      push!(optionValuePtrs,convert(optionCTypeIn,optionValues[end]));
     end
     idx += 1;
   end 
-  numOptions = numel(optionIds)
+  numOptions = length(optionIds)
 
 #  println("image: $(typeof(image)) $image")
 #  println("numOptions: $numOptions")
 #  println("optionIds: $optionIds")
 #  println("optionValues: $optionValues")
 #  println("optionValuePtrs: $optionValuePtrs")
-#  for i = 1:numel(optionIds)
+#  for i = 1:length(optionIds)
 #    println("$i : $(optionIds[i]) , $(optionValues[i]) , $(optionValuePtrs[i])")
 #  end
 
   result = ccall(dlsym(libcuda,:cuModuleLoadDataEx),CUresult,(Ptr{CUmodule},Ptr{Uint8},Uint32,Ptr{CUjit_option},Ptr{Ptr{Void}}),hmod,image,numOptions,optionIds,optionValuePtrs)
 
-#  println("After Call: $(numel(optionIds))")
-  optionValuesOut = Array(Any,numel(optionIds))
-  for idx = 1:numel(optionIds)
+#  println("After Call: $(length(optionIds))")
+  optionValuesOut = Array(Any,length(optionIds))
+  for idx = 1:length(optionIds)
 #    println("$idx : $(optionIds[idx]) , $(optionValuePtrs[idx])")
     option = optionIds[idx];  
     (optionJuliaTypeIn,optionJuliaTypeOut) = CUjit_option_julia_types[option];
