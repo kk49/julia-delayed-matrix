@@ -1,5 +1,5 @@
 ## Delayed Expressions Demo
-# Copyright 2012, Krzysztof Kamieniecki (krys@kamieniecki.com)
+# Copyright 2012-2013, Krzysztof Kamieniecki (krys@kamieniecki.com)
 
 require("demat.jl")
 

@@ -1,5 +1,5 @@
 ## Delayed Expressions TODO
-# Copyright 2012, Krzysztof Kamieniecki (krys@kamieniecki.com)
+# Copyright 2012-2013, Krzysztof Kamieniecki (krys@kamieniecki.com)
 
 # add option to do fastmath (less accurate) vs accuratemath
 # add type for distributed matrixies, initially use to process arrays bigger than can fit on the GPU at one time

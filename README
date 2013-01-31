@@ -1,7 +1,19 @@
 ## Delayed Expressions README
-# Copyright 2012, Krzysztof Kamieniecki (krys@kamieniecki.com)
+# Copyright 2012-2013, Krzysztof Kamieniecki (krys@kamieniecki.com)
 
-## USAGE
-For DEMO load("demat_demo.jl") from julia command line
-To use load("demat.jl")
+## Basic Usage
+For DEMO 
 
+    require("demat_demo.jl") 
+
+from julia command line. That will cause the expression to be compiled, cached, and run.
+
+It will run faster when the expressions are reused so run the tests again using
+
+    demat_test()
+
+To load without the demo use
+
+    require("demat.jl")
+    
+    
