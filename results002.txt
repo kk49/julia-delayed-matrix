@@ -1,0 +1,86 @@
+user@xxx$ julia -L demat_demo.jl
+0 : Quadro FX 3800M : CC = (1,1) : Mem (MiB) = 1023.6875
+ASSIGN TEST
+running 10 iterations of 10000000 sized for loops...
+-------------------
+#1 Standard Julia For Loop:
+Elapsed time: 0.7509620189666748
+#1a Standard Julia For Loop (in Function):
+Elapsed time: 0.5961720943450928
+#2 Standard Julia Vector:
+Elapsed time: 2.375373125076294
+#3 Delayed Expression (Julia):
+DeMatJulia: Built New Assign (took 0.0051801204681396484 seconds) ... DeBinOp{+,DeBinOp{+,DeReadOp{DeArrJulia{Float32,1}},DeBinOp{.*,DeReadOp{DeArrJulia{Float32,1}},DeReadOp{DeArrJulia{Float32,1}}}},DeConst{Float32}}
+Elapsed time: 0.9487810134887695
+#4 Delayed Expression (CUDA):
+CUDA Build Time: 0.005605f0 Seconds
+DeMatJulia: Built New Assign (took 0.4248199462890625 seconds) ... DeBinOp{+,DeBinOp{+,DeReadOp{DeArrCuda{Float32,1}},DeBinOp{.*,DeReadOp{DeArrCuda{Float32,1}},DeReadOp{DeArrCuda{Float32,1}}}},DeConst{Float32}}
+Elapsed time: 0.8072640895843506 Readback time: 0.01214289665222168
+
+error(sum((#1 - DeJulia).^2) / abs(sum(#1)) == 0.0f0
+error(sum((#1 - DeCuda).^2) / abs(sum(#1)) == 1.0401701f-15
+
+SUM TEST
+Julia sum(x): Time 0.14293503761291504 Result 4.999181e7
+DeMatJulia: Built New Sum (took 0.0018739700317382812 seconds) ... DeReadOp{DeArrJulia{Float32,1}}
+DeMatJulia: Built New Sum (took 0.0022308826446533203 seconds) ... DeReadOp{DeArrJulia{Float32,1}}
+DeMatJulia: Built New Sum (took 0.002145051956176758 seconds) ... DeReadOp{DeArrJulia{Float32,1}}
+DeMatJulia: Built New Sum (took 0.00191497802734375 seconds) ... DeReadOp{DeArrJulia{Float32,1}}
+DeMatJulia: Built New Sum (took 0.0027239322662353516 seconds) ... DeReadOp{DeArrJulia{Float32,1}}
+DeMatJulia: Built New Sum (took 0.0018548965454101562 seconds) ... DeReadOp{DeArrJulia{Float32,1}}
+DeMatJulia: Built New Sum (took 0.002321004867553711 seconds) ... DeReadOp{DeArrJulia{Float32,1}}
+DeMatJulia: Built New Sum (took 0.0025610923767089844 seconds) ... DeReadOp{DeArrJulia{Float32,1}}
+DeMatJulia: Built New Sum (took 0.0019390583038330078 seconds) ... DeReadOp{DeArrJulia{Float32,1}}
+DeMatJulia: Built New Sum (took 0.002379894256591797 seconds) ... DeReadOp{DeArrJulia{Float32,1}}
+Delay Expression (Julia) sum(x): Time 0.23258399963378906 Result 4.999181e7
+Julia sum(x .* x): Time 1.037222146987915 Result 3.30028275e7
+DeMatJulia: Built New Sum (took 0.002894163131713867 seconds) ... DeBinOp{.*,DeReadOp{DeArrJulia{Float32,1}},DeReadOp{DeArrJulia{Float32,1}}}
+Delay Expression (Julia) sum(x .* x): Time 0.2741408348083496 Result 3.30153825e7
+               _
+   _       _ _(_)_     |  A fresh approach to technical computing
+  (_)     | (_) (_)    |  Documentation: http://docs.julialang.org
+   _ _   _| |_  __ _   |  Type "help()" to list help topics
+  | | | | | | |/ _` |  |
+  | | |_| | | | (_| |  |  Version 0.0.0+107286289.rf754.dirty
+ _/ |\__'_|_|_|\__'_|  |  Commit f754e4cd6f (2013-01-15 16:23:55)*
+|__/                   |
+
+julia> demat_test()
+CUDA Clearing jlCUBuffer(0x0000000002625a00,Ptr{Void} @0x0000000004e70000)
+CUDA Clearing jlCUBuffer(0x0000000002625a00,Ptr{Void} @0x0000000002840000)
+CUDA Clearing jlCUBuffer(0x0000000002625a00,Ptr{Void} @0x0000000000210000)
+CUDA Clearing jlCUBuffer(0x0000000002625a00,Ptr{Void} @0x00000000074a0000)
+ASSIGN TEST
+running 10 iterations of 10000000 sized for loops...
+-------------------
+#1 Standard Julia For Loop:
+Elapsed time: 0.7626380920410156
+#1a Standard Julia For Loop (in Function):
+Elapsed time: 0.5560379028320312
+#2 Standard Julia Vector:
+Elapsed time: 2.434730052947998
+#3 Delayed Expression (Julia):
+Elapsed time: 0.7396018505096436
+#4 Delayed Expression (CUDA):
+Elapsed time: 0.033392906188964844 Readback time: 0.018346071243286133
+
+error(sum((#1 - DeJulia).^2) / abs(sum(#1)) == 0.0f0
+error(sum((#1 - DeCuda).^2) / abs(sum(#1)) == 1.04215f-15
+
+SUM TEST
+Julia sum(x): Time 0.13521409034729004 Result 4.9991415e7
+DeMatJulia: Built New Sum (took 0.0018219947814941406 seconds) ... DeReadOp{DeArrJulia{Float32,1}}
+DeMatJulia: Built New Sum (took 0.0018410682678222656 seconds) ... DeReadOp{DeArrJulia{Float32,1}}
+DeMatJulia: Built New Sum (took 0.002351045608520508 seconds) ... DeReadOp{DeArrJulia{Float32,1}}
+DeMatJulia: Built New Sum (took 0.0018100738525390625 seconds) ... DeReadOp{DeArrJulia{Float32,1}}
+DeMatJulia: Built New Sum (took 0.0029740333557128906 seconds) ... DeReadOp{DeArrJulia{Float32,1}}
+DeMatJulia: Built New Sum (took 0.0017747879028320312 seconds) ... DeReadOp{DeArrJulia{Float32,1}}
+DeMatJulia: Built New Sum (took 0.002752065658569336 seconds) ... DeReadOp{DeArrJulia{Float32,1}}
+DeMatJulia: Built New Sum (took 0.001833200454711914 seconds) ... DeReadOp{DeArrJulia{Float32,1}}
+DeMatJulia: Built New Sum (took 0.002465963363647461 seconds) ... DeReadOp{DeArrJulia{Float32,1}}
+DeMatJulia: Built New Sum (took 0.002593994140625 seconds) ... DeReadOp{DeArrJulia{Float32,1}}
+Delay Expression (Julia) sum(x): Time 0.2309260368347168 Result 4.9991415e7
+Julia sum(x .* x): Time 1.0520260334014893 Result 3.29971025e7
+Delay Expression (Julia) sum(x .* x): Time 0.23450088500976562 Result 3.30015025e7
+(0.0f0,1.04215f-15)
+
