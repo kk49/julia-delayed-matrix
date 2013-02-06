@@ -61,9 +61,14 @@ end
 
 de_make_bin_op(OP,A,B) = DeBinOp(OP,typeof(A),typeof(B))(A,B)
 
-deBinOpMap = [ :+ => :+, :- => :-, :.* => :*, :./ => :/, :.^ => :^]
+deUniOpMap = [ :exp => :exp, :log => :log, :cos => :cos, :sin => :sin ]
+deBinOpMap = [ :+ => :+, :- => :-, :.* => :*, :./ => :/, :.^ => :^ ]
 
 importall Base
+
+for op = keys(deUniOpMap)
+  @eval ($op)(a::DeEle) = DeUniOp{$(expr(:quote, op)),typeof(de_promote(a,))...}(de_promote(a,)...)
+end
 
 for op = keys(deBinOpMap)
   @eval ($op)(a::DeEle,b::Number) = DeBinOp{$(expr(:quote, op)),typeof(de_promote(a,b))...}(de_promote(a,b)...)

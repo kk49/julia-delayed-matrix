@@ -42,7 +42,16 @@ function de_jl_eval(a::DeReadOp,param,idxSym)
     )
 end
 
-#function de_jl_eval(v::DeBinOp,param,idxSym)
+function de_jl_eval(v::DeUniOp,param,idxSym)
+   @gensym r
+   p1 = de_jl_eval(v.p1,quote ($param).p1 end,idxSym)
+   ( r
+   , promote_type(p1[2])
+   , quote $(p1[3]) end
+   , quote $(p1[4]);($r) = de_jl_do_op($v,$(p1[1])) end 
+   )
+end
+
 function de_jl_eval(v::DeBinOp,param,idxSym)
    @gensym r
    p1 = de_jl_eval(v.p1,quote ($param).p1 end,idxSym)
@@ -52,6 +61,11 @@ function de_jl_eval(v::DeBinOp,param,idxSym)
    , quote $(p1[3]);$(p2[3]) end
    , quote $(p1[4]);$(p2[4]);($r) = de_jl_do_op($v,$(p1[1]),$(p2[1])) end 
    )
+end
+
+for op = keys(deUniOpMap)
+    opSingle = deUniOpMap[op];
+    @eval de_jl_do_op{P1}(v::DeUniOp{$(expr(:quote, op)),P1},a) = ($opSingle)(a)
 end
 
 for op = keys(deBinOpMap)
